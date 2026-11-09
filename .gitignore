@@ -17,6 +17,10 @@ assets/cache/
 *.wav
 *.mp3
 
+# Keep the committed sample short for preview (exception to *.mp4 above)
+!samples/
+!samples/space-sample.mp4
+
 # Local environment / secrets
 .env
 

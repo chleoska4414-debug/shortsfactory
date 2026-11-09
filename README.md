@@ -97,6 +97,13 @@ file to Reels and TikTok.
 > `shortsfactory generate --topic space` instead of `python -m shortsfactory ...`.
 > Both are identical.
 
+### Sample output
+
+A ready-made example short lives at [`samples/space-sample.mp4`](samples/space-sample.mp4).
+It was generated with the default offline settings, so its narration is the synthetic
+`tone` placeholder rather than a real voice. For proper narration, render your own with
+the free neural voice: `python -m shortsfactory generate --topic space --provider-tts edge`.
+
 ## Choosing and adding topics
 
 List the topic packs that ship with the tool:
