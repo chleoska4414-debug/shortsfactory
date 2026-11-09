@@ -16,6 +16,7 @@ from typing import List, Optional
 
 from .config import Config
 from .content.topics import list_topics
+from .story.episodes import EPISODES, list_episodes
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -58,6 +59,24 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("topics", help="List available topic packs.")
+
+    ep = sub.add_parser(
+        "episode", help="Render a scene-based micro-drama episode."
+    )
+    ep.add_argument(
+        "--episode", default="ep01", help="Episode id (see 'episodes'). Default: ep01."
+    )
+    ep.add_argument(
+        "--out", default=None, help="Output mp4 path (default: out/<episode>.mp4)."
+    )
+    ep.add_argument(
+        "--provider-tts",
+        default=None,
+        choices=["tone", "edge", "gtts"],
+        help="TTS provider (default: from config / 'tone').",
+    )
+
+    sub.add_parser("episodes", help="List available micro-drama episodes.")
     return parser
 
 
@@ -73,6 +92,36 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("Available topic packs:")
         for name in list_topics():
             print(f"  - {name}")
+        return 0
+
+    if args.command == "episodes":
+        print("Available episodes:")
+        for ep_id in list_episodes():
+            print(f"  - {ep_id}: {EPISODES[ep_id].title}")
+        return 0
+
+    if args.command == "episode":
+        from .pipeline import generate_episode
+
+        config = Config.load()
+        out_path = args.out or os.path.join("out", f"{args.episode}.mp4")
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+
+        try:
+            result = generate_episode(
+                episode_id=args.episode,
+                out_path=out_path,
+                tts_name=args.provider_tts,
+                config=config,
+            )
+        except (KeyError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 3
+
+        print(f"Wrote {result}")
         return 0
 
     if args.command == "generate":

@@ -17,24 +17,32 @@ from dotenv import load_dotenv
 def _default_font_path() -> Optional[str]:
     """Return a path to a usable scalable TTF font, or None to fall back to PIL's default.
 
-    We ship a real TrueType font (Noto Sans) as package data under assets/fonts/ so
-    captions always render with a scalable font at the requested size, with no network
-    download and no reliance on a system-installed font. Some Pillow builds do not ship a
-    bundled DejaVuSans.ttf, so we do not depend on that.
+    We ship real TrueType fonts as package data under assets/fonts/ so captions always
+    render with a scalable font at the requested size, with no network download and no
+    reliance on a system-installed font. Some Pillow builds do not ship a bundled
+    DejaVuSans.ttf, so we do not depend on that.
+
+    The micro-drama deliverable uses Korean (Hangul) captions, so the CJK-capable
+    NanumGothic font is preferred by default: the previously bundled Noto Sans Regular has
+    ZERO Hangul coverage (every Hangul codepoint renders as the identical .notdef tofu
+    box). NanumGothic renders distinct, real Hangul glyphs.
 
     Resolution order:
-      1. The bundled Noto Sans font (always present with the installed package).
-      2. Pillow's bundled DejaVuSans.ttf, if this Pillow build provides it.
-      3. None -> the caption renderer falls back to ImageFont.load_default(font_size).
+      1. The bundled Korean-capable NanumGothic font (preferred; covers Hangul + Latin).
+      2. The bundled Noto Sans font (Latin fallback, kept so nothing regresses).
+      3. Pillow's bundled DejaVuSans.ttf, if this Pillow build provides it.
+      4. None -> the caption renderer falls back to ImageFont.load_default(font_size).
     """
-    # 1. Font vendored with this package.
-    bundled = os.path.join(
-        os.path.dirname(__file__), "assets", "fonts", "NotoSans-Regular.ttf"
-    )
-    if os.path.exists(bundled):
-        return bundled
+    fonts_dir = os.path.join(os.path.dirname(__file__), "assets", "fonts")
 
-    # 2. Pillow's own bundled font, if available on this build.
+    # 1. Korean-capable font vendored with this package (preferred default).
+    # 2. Latin-only Noto Sans, kept as a fallback so existing behavior never regresses.
+    for name in ("NanumGothic-Regular.ttf", "NotoSans-Regular.ttf"):
+        bundled = os.path.join(fonts_dir, name)
+        if os.path.exists(bundled):
+            return bundled
+
+    # 3. Pillow's own bundled font, if available on this build.
     try:
         import PIL
 

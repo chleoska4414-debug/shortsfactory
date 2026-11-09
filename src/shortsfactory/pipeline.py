@@ -70,3 +70,46 @@ def generate(
     result = render_video(script, tts_provider, bg_provider, out_path, config)
     logger.info("Done: %s", result)
     return result
+
+
+def generate_episode(
+    episode_id: str,
+    out_path: str,
+    tts_name: Optional[str] = None,
+    config: Optional[Config] = None,
+) -> str:
+    """Render a scene-based micro-drama Episode to ``out_path``.
+
+    Looks up the Episode from ``story/episodes.py``, resolves the TTS provider via the
+    existing factory (default offline 'tone'), and calls the scene renderer. The knowledge
+    card path (``generate``) is untouched. Returns the output path.
+    """
+    from .render.story_compositor import render_episode
+    from .story.episodes import get_episode
+
+    config = config or Config.load()
+    tts_name = tts_name or config.tts_provider
+
+    episode = get_episode(episode_id)
+    logger.info(
+        "Rendering episode: id=%s title=%s scenes=%d ~%.1fs tts=%s -> %s",
+        episode.id,
+        episode.title,
+        len(episode.scenes),
+        episode.total_duration_sec,
+        tts_name,
+        out_path,
+    )
+
+    tts_kwargs = {}
+    if tts_name == "edge":
+        tts_kwargs["voice"] = config.edge_tts_voice
+    tts_provider = get_tts_provider(tts_name, **tts_kwargs)
+
+    out_dir = os.path.dirname(os.path.abspath(out_path))
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    result = render_episode(episode, tts_provider, config, out_path)
+    logger.info("Done: %s", result)
+    return result

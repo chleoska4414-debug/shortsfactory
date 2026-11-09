@@ -20,6 +20,11 @@ assets/cache/
 # Keep the committed sample short for preview (exception to *.mp4 above)
 !samples/
 !samples/space-sample.mp4
+!samples/ep01.mp4
+
+# User/AI-supplied character art is user content; keep it out of the tree.
+# The directory convention is documented in background/image_provider.py.
+assets/characters/
 
 # Local environment / secrets
 .env
