@@ -1,0 +1,112 @@
+"""Command-line interface for shortsfactory.
+
+Usage:
+    shortsfactory generate --topic space [--out out/space.mp4] [--provider-tts tone]
+                           [--provider-bg gradient] [--cards 5]
+    shortsfactory topics
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import os
+import sys
+from typing import List, Optional
+
+from .config import Config
+from .content.topics import list_topics
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="shortsfactory",
+        description="Generate vertical 9:16 knowledge-card short-form videos (offline-first).",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    gen = sub.add_parser("generate", help="Render a short video for a topic.")
+    gen.add_argument("--topic", required=True, help="Topic pack name (see 'topics').")
+    gen.add_argument(
+        "--out",
+        default=None,
+        help="Output mp4 path (default: out/<topic>.mp4).",
+    )
+    gen.add_argument(
+        "--provider-tts",
+        default=None,
+        choices=["tone", "edge", "gtts"],
+        help="TTS provider (default: from config / 'tone').",
+    )
+    gen.add_argument(
+        "--provider-bg",
+        default=None,
+        choices=["gradient", "pexels"],
+        help="Background provider (default: from config / 'gradient').",
+    )
+    gen.add_argument(
+        "--provider-script",
+        default=None,
+        choices=["template"],
+        help="Script provider (default: 'template').",
+    )
+    gen.add_argument(
+        "--cards",
+        type=int,
+        default=5,
+        help="Number of knowledge cards to include (default: 5).",
+    )
+
+    sub.add_parser("topics", help="List available topic packs.")
+    return parser
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "topics":
+        print("Available topic packs:")
+        for name in list_topics():
+            print(f"  - {name}")
+        return 0
+
+    if args.command == "generate":
+        # Import here so 'topics' stays light and import errors surface in context.
+        from .pipeline import generate
+
+        config = Config.load()
+        out_path = args.out or os.path.join("out", f"{args.topic}.mp4")
+        os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+
+        try:
+            result = generate(
+                topic=args.topic,
+                out_path=out_path,
+                tts_name=args.provider_tts,
+                bg_name=args.provider_bg,
+                script_name=args.provider_script,
+                n_cards=args.cards,
+                config=config,
+            )
+        except (KeyError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
+        except RuntimeError as exc:
+            # Clear, actionable provider errors (e.g. network provider unavailable).
+            print(f"Error: {exc}", file=sys.stderr)
+            return 3
+
+        print(f"Wrote {result}")
+        return 0
+
+    parser.print_help()
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

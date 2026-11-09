@@ -1,0 +1,25 @@
+# Virtual environments
+.venv/
+venv/
+
+# Python caches / build artifacts
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# Generated media and cached assets
+out/
+assets/cache/
+*.mp4
+*.wav
+*.mp3
+
+# Local environment / secrets
+.env
+
+# Sandbox / tooling artifacts (not part of the deliverable)
+.kiro/
+.agents/

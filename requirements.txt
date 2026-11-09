@@ -1,0 +1,7 @@
+# Core runtime dependencies (mirror of pyproject.toml [project].dependencies).
+# Optional network providers live in the 'providers' extra: pip install -e ".[providers]"
+moviepy>=2.1.1
+imageio-ffmpeg>=0.5
+pillow>=10.1
+numpy>=1.26
+python-dotenv>=1.0
