@@ -41,6 +41,9 @@ def build_cues(
     for i, seg in enumerate(script.segments):
         seg_start = seg_starts[i]
         seg_end = seg_starts[i + 1] if i + 1 < len(seg_starts) else total_duration
+        # 시작/끝을 [0, total_duration] 안으로 clamp 하고 start<=end 보장
+        seg_start = min(max(seg_start, 0.0), total_duration)
+        seg_end = min(max(seg_end, seg_start), total_duration)
         lines = _wrap(seg.narration, max_chars)
         if not lines:
             continue
@@ -49,6 +52,9 @@ def build_cues(
         for j, line in enumerate(lines):
             start = seg_start + j * per
             end = start + per
+            # 자막이 영상 길이를 넘지 않도록 clamp
+            start = min(start, total_duration)
+            end = min(end, total_duration)
             cues.append(SubtitleCue(start=round(start, 2), end=round(end, 2), text=line))
     return cues
 
@@ -58,16 +64,17 @@ def _estimate_segment_starts(
 ) -> list[float]:
     """각 세그먼트의 시작 시각(초)을 추정한다."""
     if words:
-        # 단어 수 기반으로 세그먼트 경계의 단어 인덱스를 찾고 그 시각을 사용
+        # 단어 수 기반으로 세그먼트 경계의 단어 인덱스를 찾고 그 시각을 사용.
+        # 단어가 모자라면 total로 떨어지므로, 단조 증가를 보장하도록 clamp 한다.
         starts = [0.0]
         word_counts = [max(len(t.split()), 1) for t in seg_texts]
         idx = 0
         for wc in word_counts[:-1]:
             idx += wc
-            if idx < len(words):
-                starts.append(words[idx].start)
-            else:
-                starts.append(total)
+            cand = words[idx].start if idx < len(words) else total
+            # 이전 시작값 이상, total 이하로 단조 보장
+            cand = min(max(cand, starts[-1]), total)
+            starts.append(cand)
         return starts
     # 타임스탬프 없음 → 글자 수 비례 균등 분배
     total_chars = sum(len(t) for t in seg_texts) or 1

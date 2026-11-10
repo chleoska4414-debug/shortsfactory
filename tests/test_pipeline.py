@@ -50,6 +50,17 @@ def test_script_ab_versions_differ():
     assert a.title != b.title
 
 
+def test_script_b_is_substantially_longer_than_a():
+    # B 대본은 A보다 내레이션 분량이 뚜렷이 많아야 목표 길이(65~90초)에 도달 (Task 4.9)
+    p = TemplateScriptProvider()
+    a = p.generate("아침 루틴", "A")
+    b = p.generate("아침 루틴", "B")
+    len_a = len(a.full_narration)
+    len_b = len(b.full_narration)
+    # B 내레이션 글자수가 A의 2배 이상이어야 길이 목표 달성에 유리
+    assert len_b >= len_a * 2, f"A={len_a}자, B={len_b}자 — B가 충분히 길지 않음"
+
+
 def test_subtitle_cues_from_words():
     from app.providers.tts import WordMark
     p = TemplateScriptProvider()
