@@ -85,6 +85,17 @@ def _build_parser() -> argparse.ArgumentParser:
             "cliffhanger and require an API key + outbound internet."
         ),
     )
+    ep.add_argument(
+        "--provider-image",
+        default=None,
+        choices=["openai"],
+        help=(
+            "OPT-IN AI character art (default: none = offline code-drawn figures with "
+            "motion). 'openai' generates/caches a consistent key visual per character and "
+            "composites it in place of the code-drawn figure; requires OPENAI_API_KEY + "
+            "outbound internet and is billed per image."
+        ),
+    )
 
     sub.add_parser("episodes", help="List available micro-drama episodes.")
     return parser
@@ -123,6 +134,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 out_path=out_path,
                 tts_name=args.provider_tts,
                 script_name=args.provider_script,
+                image_name=args.provider_image,
                 config=config,
             )
         except (KeyError, ValueError) as exc:

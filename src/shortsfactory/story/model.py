@@ -52,6 +52,15 @@ class VisualSpec:
     # Optional user/AI-supplied PNG that, if present, is composited instead of the
     # code-drawn figure. Relative to the repo root or absolute. See image_provider.py.
     asset_image: Optional[str] = None
+    # Optional character-consistency controls for the OPTIONAL AI image path only. They do
+    # NOT affect the offline code-drawn figure in any way. ``style_prompt`` is a stable,
+    # fixed appearance description (hair, wardrobe, art style) so the generated character
+    # looks the same across every scene and episode; ``seed`` is a deterministic image
+    # seed combined with the prompt so repeat generations stay consistent. Both are
+    # optional with defaults, so all authored data and tests are unaffected. When
+    # ``style_prompt`` is None the AI path derives a stable prompt from the other fields.
+    style_prompt: Optional[str] = None
+    seed: int = 0
 
 
 @dataclass

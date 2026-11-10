@@ -171,6 +171,42 @@ python -m shortsfactory episode --episode ep01 --out out/ep01.mp4 --provider-tts
 `--provider-tts` accepts the same options as the card mode (`tone` offline default,
 `edge`, `gtts`).
 
+### Directed motion and camera (offline)
+
+The episode render is never static. Each scene is a directed shot built purely offline:
+
+- **Ken Burns zoom and pan.** Every scene slowly pushes in or pulls back with a gentle
+  camera drift; the direction is seeded so neighboring scenes drift opposite ways instead
+  of all sliding the same way.
+- **Beat-driven emphasis.** The HOOK pushes in calmly, twists push harder, and the
+  cliffhanger pulls back ominously. Reversal and twist moments add a short decaying screen
+  shake, a quick punch-in, a brief RGB-split glitch at the cut, and a white flash.
+- **Character idle animation.** The code-drawn figure breathes with a slow sway, blinks on
+  a natural cadence, and moves its mouth while speaking on dialog scenes. These idle
+  variants apply only to the code-drawn figure and are skipped gracefully when real art is
+  supplied (the art PNG is composited verbatim).
+
+All of this runs with no network and no media software; it is a pure function of the scene
+and a seed, so a given scene renders the same way every time.
+
+### AI episode scripts (optional)
+
+Besides the authored offline episode, the episode mode can GENERATE the next episode from
+the series bible plus the previous episode's cliffhanger using an AI script provider:
+
+```bash
+# Needs OPENAI_API_KEY + internet:
+python -m shortsfactory episode --episode ep01 --provider-script openai
+# Needs ANTHROPIC_API_KEY + internet:
+python -m shortsfactory episode --episode ep01 --provider-script anthropic
+```
+
+The default (`--provider-script template`, or omitting the flag) uses the authored offline
+episode and needs no key. Set the matching key in `.env`
+(`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`). With no key or no network these providers stop
+with a clear error instead of producing a broken video; they are never used by the default
+offline path.
+
 ### Getting real "well-drawn manga" character visuals
 
 The offline default draws each character as a code-generated stylized figure built from
@@ -189,10 +225,40 @@ existing PNG, the renderer composites that artwork instead of the code-drawn fig
 files are your own content and are intentionally kept out of the committed repository; only
 the directory convention ships.
 
-Alternatively, you can enable the optional OpenAI image-generation path by setting
-`OPENAI_API_KEY` in `.env`. That path needs outbound internet and a paid key; with no key
-or no network it stops with a clear error instead of producing a broken video. It is never
-used by the default offline render.
+Alternatively, you can enable the optional OpenAI image-generation path with an explicit
+flag plus a key:
+
+```bash
+python -m shortsfactory episode --episode ep01 --provider-image openai
+```
+
+This generates a consistent key visual for each character and composites it in place of
+the code-drawn figure, reusing the exact same `asset_image` hook as supplied art. It needs
+`OPENAI_API_KEY` in `.env` and outbound internet. With no key, no network, or no
+`--provider-image` flag it falls back cleanly: the default render draws the offline figures
+with motion, and a key-missing AI image request stops with a clear error instead of a
+broken video or a traceback. The AI image path is never used by the default offline render.
+
+#### Keeping a character consistent (same face across scenes)
+
+Character consistency is the hard part of any generated-art pipeline, so the tool anchors
+it deterministically. Each character has a **fixed style prompt** (appearance, hair,
+wardrobe, art style) and a **deterministic seed**, both carried on the character's visual
+spec (`VisualSpec.style_prompt` and `VisualSpec.seed`). If you do not author a style
+prompt, a stable one is derived from the character's other visual fields. Every scene image
+reuses that same fixed style prompt and seed and appends only the situation, so the
+character stays on-model while the background changes from scene to scene and across
+episodes.
+
+#### A realistic cost note
+
+Image generation is **billed per image**, and an episode needs several shots (at least one
+key visual per character, and optionally a per-scene situation image). Those charges add
+up quickly across an episode and across a series, so treat the image path as a paid,
+opt-in feature. To avoid paying twice for the same picture, generated images are **cached
+on disk** under `assets/cache/` keyed by a hash of the backend, model, prompt, size, and
+seed; a repeat render reuses the cached image instead of calling the paid API again. The
+cache directory is gitignored and never committed.
 
 ### Sample episode and an honest reality note
 
@@ -204,15 +270,18 @@ about what it is:
 - Its narration is the synthetic **`tone` placeholder**, not a real voice.
 
 That sample exists to prove the episode engine end to end on a machine with no network and
-no media software. True "well-drawn manga" quality and real narration come from running it
-on your own computer with character art dropped in (or an image provider enabled) and the
-`edge` neural voice turned on.
+no media software. In this offline sandbox the on-screen figures are always code-drawn,
+because the AI image path needs a key and outbound internet that are not available here.
+Drop a key into `.env` and run with `--provider-image openai` on your own computer and the
+same engine produces real AI illustrations instead. True "well-drawn manga" quality and
+real narration come from running it locally with character art dropped in (or the image
+provider enabled) and the `edge` neural voice turned on.
 
 ## Provider options
 
-A "provider" is a swappable piece of the pipeline. There are three kinds: narration
-(TTS), background, and script. You can keep the offline defaults, or opt into better
-quality.
+A "provider" is a swappable piece of the pipeline. There are four kinds: narration (TTS),
+background, script, and (for the episode mode) AI images. You can keep the offline
+defaults, or opt into better quality.
 
 | Concern    | Option     | Cost / needs        | How to select |
 |------------|------------|---------------------|---------------|
@@ -221,8 +290,9 @@ quality.
 | Narration  | `gtts`     | Free, needs internet. Google Text-to-Speech. | `--provider-tts gtts` |
 | Background | `gradient` (default) | Offline, free. A Pillow-rendered color gradient. | `--provider-bg gradient` or `BG_PROVIDER=gradient` |
 | Background | `pexels`   | **Opt-in / paid key**, needs internet. Royalty-free stock footage from Pexels. | `--provider-bg pexels` plus `PEXELS_API_KEY` in `.env` |
-| Script     | `template` (default) | Offline, free. Turns a topic pack into a narration script. | `--provider-script template` |
-| AI images  | (optional) | **Opt-in / paid key**, needs internet. Generates character art for the micro-drama mode; the offline default draws figures with no key. | set `OPENAI_API_KEY` in `.env` |
+| Script (cards) | `template` (default) | Offline, free. Turns a topic pack into a narration script. | `--provider-script template` |
+| Script (episode) | `openai` / `anthropic` | **Opt-in / paid key**, needs internet. Generates the next episode from the series bible + prior cliffhanger. | `--provider-script openai` (`OPENAI_API_KEY`) or `--provider-script anthropic` (`ANTHROPIC_API_KEY`) |
+| AI images (episode) | `openai` | **Opt-in / paid key**, billed per image, needs internet. Generates consistent character art; the offline default draws figures with no key. | `--provider-image openai` plus `OPENAI_API_KEY` in `.env` |
 
 ### Why the default is offline, and what to use instead
 
@@ -245,9 +315,11 @@ choose a different voice by setting `EDGE_TTS_VOICE` in `.env` (default
 You can select any provider two ways:
 
 - **Per run, with a flag** (overrides everything): `--provider-tts edge`,
-  `--provider-bg pexels`, `--provider-script template`.
-- **As a default, in `.env`**: `TTS_PROVIDER=edge`, `BG_PROVIDER=pexels`. These apply to
-  every run unless a flag overrides them.
+  `--provider-bg pexels`, `--provider-script openai`, `--provider-image openai`.
+- **As a default, in `.env`**: `TTS_PROVIDER=edge`, `BG_PROVIDER=pexels`,
+  `SCRIPT_PROVIDER=template`, `IMAGE_PROVIDER=openai`. These apply to every run unless a
+  flag overrides them. (`--provider-image` has no default; leave `IMAGE_PROVIDER` unset to
+  stay offline.)
 
 Paid or key-based providers also need their key in `.env`:
 
@@ -255,7 +327,11 @@ Paid or key-based providers also need their key in `.env`:
 # .env
 PEXELS_API_KEY=your_pexels_key_here
 OPENAI_API_KEY=your_openai_key_here
+ANTHROPIC_API_KEY=your_anthropic_key_here
 ```
+
+`OPENAI_API_KEY` is used by both the `openai` AI script provider and the `openai` AI image
+provider; `ANTHROPIC_API_KEY` is used by the `anthropic` AI script provider.
 
 If you select a provider that needs a key or network and it is not available, the tool
 stops with a clear error instead of producing a broken video.

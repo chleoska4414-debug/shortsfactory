@@ -68,6 +68,11 @@ class Config:
     pexels_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    # Optional image provider for the micro-drama character art (opt-in; offline default
+    # is no image generation). When unset (None), the episode render draws the offline
+    # code-drawn figure; only an explicit --provider-image / IMAGE_PROVIDER activates it.
+    image_provider: Optional[str] = None
+    openai_image_model: str = "gpt-image-1"
     font_path: Optional[str] = field(default_factory=_default_font_path)
 
     @classmethod
@@ -107,5 +112,8 @@ class Config:
             pexels_api_key=os.getenv("PEXELS_API_KEY") or None,
             openai_api_key=os.getenv("OPENAI_API_KEY") or None,
             anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
+            image_provider=os.getenv("IMAGE_PROVIDER") or None,
+            openai_image_model=os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+            or "gpt-image-1",
             font_path=font_path,
         )

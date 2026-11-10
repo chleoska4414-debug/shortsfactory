@@ -27,7 +27,13 @@ The working foundation shipped in this repository.
     (걷어차인 회장님) ships as data with its series bible and shot-by-shot script under
     `stories/ep01/`, and a committed offline sample at `samples/ep01.mp4`.
 - Pluggable providers: TTS (`tone` offline default, `edge`, `gtts`), background
-  (`gradient` offline default, `pexels`), and script (`template`).
+  (`gradient` offline default, `pexels`), card script (`template`), and for the episode
+  mode AI script providers (`openai`, `anthropic`) that generate the next episode from the
+  series bible + prior cliffhanger. The AI script providers are opt-in and key-gated; the
+  authored offline episode remains the default.
+- Directed offline motion on every episode scene: Ken Burns zoom/pan, beat-driven screen
+  shake / RGB-split glitch / flash on twists and reversals, and character idle animation
+  (breathing sway, blink, and a speaking mouth on dialog). No network, fully deterministic.
 - Korean captions render with a vendored Korean-capable font.
 - Runs fully offline with no system media binaries (ffmpeg is bundled via
   `imageio-ffmpeg`).
@@ -38,25 +44,38 @@ same file to Instagram Reels and TikTok by hand.
 **Risks:** the offline `tone` narration is a placeholder; real publishing needs a neural
 voice (`edge`), which requires internet. The offline character visuals are code-generated
 stylized figures, not hand-drawn art; true "well-drawn manga" quality needs supplied
-character art or an image provider (see Phase 2). Render time grows with the number of
-scenes or cards.
+character art or the image provider (see Phase 2). The AI script and image providers each
+**need a paid key plus outbound network**, so they are never run offline or in CI and the
+committed sample uses the offline path. Render time grows with the number of scenes or
+cards.
 
-## Phase 2: Real illustrated-character pipeline (consistent faces)
+## Phase 2: Real illustrated-character pipeline (consistent faces) (CODE PATH SHIPPED, key-gated)
 
 Turn the code-drawn stand-in figures into real webtoon / anime-style character art that
-stays consistent across an episode and across a series.
+stays consistent across an episode and across a series. The code path for this now exists
+and is opt-in; it is key-gated and cannot run in this offline environment.
 
-- Honor the drop-in convention `assets/characters/<episode>/<character_id>.png` so supplied
-  or hand-drawn character sheets are composited in place of the code-drawn figure.
-- Wire the optional image provider (OpenAI image generation, guarded by `OPENAI_API_KEY`)
-  to generate character art from each character's visual spec.
-- Keep each character's key visual stable across all of their scenes (same face, hair, and
-  wardrobe), which is the hard part of any generated-art pipeline.
+- **Done:** the drop-in convention `assets/characters/<episode>/<character_id>.png` is
+  honored, so supplied or hand-drawn character sheets are composited in place of the
+  code-drawn figure.
+- **Done:** an extensible, string-keyed image-provider abstraction with an initial OpenAI
+  backend (`gpt-image-1`, configurable to `dall-e-3`), wired into the episode render as an
+  opt-in flag (`--provider-image openai`). It generates a key visual per character and
+  sets it as the character's `asset_image`, reusing the existing compositing hook. Guarded
+  by `OPENAI_API_KEY`; with no key/flag the render is the offline figure path.
+- **Done:** a character-consistency strategy (a fixed per-character style prompt plus a
+  deterministic seed, reused for every scene so only the situation changes) and an on-disk
+  image cache under `assets/cache/` keyed by backend/model/prompt/size/seed so a repeat
+  render never re-bills the API.
+- **Next:** per-scene background/situation images layered behind the character, reference-
+  image conditioning where the backend supports it, and additional backends (e.g. Stable
+  Diffusion) via the same registry.
 
-**Risks:** image generation needs a paid key and outbound network; **face / character
-consistency** across prompts is genuinely hard and is the main quality risk; licensing of
-any generated or supplied art is the user's responsibility; generation cost and latency add
-up across a multi-scene episode.
+**Risks:** image generation **needs a paid key and outbound network**, so it is never
+exercised offline or in CI; it is **billed per image** and an episode needs several shots,
+so cost adds up; **face / character consistency** across prompts is genuinely hard and is
+the main quality risk even with a fixed style prompt + seed; licensing of any generated or
+supplied art is the user's responsibility.
 
 ## Phase 3: Korean neural narration
 

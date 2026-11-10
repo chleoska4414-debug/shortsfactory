@@ -110,11 +110,38 @@ def _previous_cliffhanger(episode_id: str) -> str:
     return " ".join(lines).strip()
 
 
+def _apply_image_provider(episode, image_name: str, config: Config) -> None:
+    """Generate/load a key visual per character and set it as the character's asset_image.
+
+    OPT-IN only: called when an image provider ('openai') is explicitly selected. For each
+    character it generates (or reuses a cached) key-visual PNG via the selected provider
+    and points ``character.visual.asset_image`` at it, so the EXISTING asset_image
+    compositing hook in ``background/character.py`` draws the art in place of the
+    code-drawn figure. With no provider selected this is never called and the render is
+    byte-for-byte the offline path. Raises a clear RuntimeError (key/network missing) which
+    the CLI maps to exit code 3.
+    """
+    from .background.image_provider import character_asset_path, get_image_provider
+
+    kwargs = {}
+    if image_name == "openai":
+        kwargs["api_key"] = config.openai_api_key
+        kwargs["model"] = config.openai_image_model
+    provider = get_image_provider(image_name, **kwargs)
+
+    for character in episode.characters:
+        out_path = character_asset_path(episode.id, character.id)
+        # generate_character reuses the on-disk cache, so a repeat render does not re-bill.
+        art_path = provider.generate_character(character.visual, out_path)
+        character.visual.asset_image = art_path
+
+
 def generate_episode(
     episode_id: str,
     out_path: str,
     tts_name: Optional[str] = None,
     script_name: Optional[str] = None,
+    image_name: Optional[str] = None,
     config: Optional[Config] = None,
 ) -> str:
     """Render a scene-based micro-drama Episode to ``out_path``.
@@ -125,12 +152,20 @@ def generate_episode(
     the prior episode's cliffhanger via that provider's ``generate_episode``. Either way a
     real Episode flows into the same offline scene renderer. The knowledge-card path
     (``generate(topic, n_cards)``) is untouched. Returns the output path.
+
+    When ``image_name`` (e.g. 'openai') is given, the OPTIONAL AI image path is activated:
+    each character's key visual is generated/loaded and set as its ``asset_image`` so the
+    existing compositing hook draws real art instead of the code-drawn figure. With no
+    ``image_name`` (the default, and always in this offline environment) no image
+    generation is attempted and the render uses the offline figures with the FEAT-002
+    motion. A key-missing AI image request raises a clear RuntimeError (CLI exit 3).
     """
     from .render.story_compositor import render_episode
     from .story.episodes import get_episode
 
     config = config or Config.load()
     tts_name = tts_name or config.tts_provider
+    image_name = (image_name or config.image_provider or "").strip().lower() or None
 
     # Resolve the Episode: authored data by default, AI-generated when an AI provider is
     # selected. 'template' and None both mean "use the authored episode" (the card
@@ -144,6 +179,13 @@ def generate_episode(
         episode = provider.generate_episode(bible, prev)
     else:
         episode = get_episode(episode_id)
+
+    # OPT-IN AI character art: only when an image provider was explicitly selected. The
+    # default offline render skips this entirely and draws the code-drawn figures.
+    if image_name:
+        logger.info("Generating character art via '%s' image provider.", image_name)
+        _apply_image_provider(episode, image_name, config)
+
     logger.info(
         "Rendering episode: id=%s title=%s scenes=%d ~%.1fs tts=%s -> %s",
         episode.id,
