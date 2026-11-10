@@ -22,15 +22,121 @@ from __future__ import annotations
 
 import math
 import os
+from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from ..story.model import Character, Scene, VisualSpec
+from ..story.model import (
+    BEAT_CLIFFHANGER,
+    BEAT_HOOK,
+    BEAT_TWIST1,
+    BEAT_TWIST2,
+    KIND_DIALOG,
+    Character,
+    Scene,
+    VisualSpec,
+)
 from .base import BackgroundProvider
 
 RGB = Tuple[int, int, int]
+
+
+@dataclass(frozen=True)
+class MotionSpec:
+    """Deterministic, beat-aware camera + character motion parameters for one scene.
+
+    Everything here is a plain number so a scene's motion is fully reproducible: given the
+    same Scene and seed, ``make_frame(t)`` is a pure function of ``t``. The compositor and
+    tests read these to reason about how dynamic a shot should be.
+
+      * ``zoom_start`` / ``zoom_end``   - Ken Burns zoom factors (1.0 == no zoom). A HOOK
+        slowly pushes in; twists push harder; some beats pull back for contrast.
+      * ``pan_x`` / ``pan_y``           - total normalized camera drift across the scene.
+      * ``sway_amp``                    - breathing/handheld sway amplitude in pixels.
+      * ``shake_amp`` / ``shake_dur``   - decaying screen-shake amplitude (px) and window.
+      * ``glitch``                      - whether a brief RGB-split displacement fires at
+        the cut (reversal / twist moments).
+      * ``punch_in``                    - extra zoom added during the first ~0.5s (a quick
+        'punch-in' on emphasis entries).
+    """
+
+    zoom_start: float = 1.0
+    zoom_end: float = 1.06
+    pan_x: float = 0.0
+    pan_y: float = 0.0
+    sway_amp: float = 4.0
+    shake_amp: float = 0.0
+    shake_dur: float = 0.0
+    glitch: bool = False
+    punch_in: float = 0.0
+
+
+def motion_for_scene(scene: Optional[Scene], seed: int = 0) -> MotionSpec:
+    """Map a Scene's beat label + flags to a deterministic :class:`MotionSpec`.
+
+    The mapping is intentionally tasteful: calm push-in for HOOK/narration, stronger push
+    and gentle handheld sway on twists/emphasis, and a short decaying shake + a glitchy
+    RGB-split at the cut for reversal/twist moments (flash / emphasis / cliffhanger). Pan
+    direction is seeded so alternating scenes drift opposite ways instead of all sliding
+    the same direction.
+    """
+    if scene is None:
+        return MotionSpec()
+
+    beat = (scene.beat_label or "").upper()
+    # Seeded sign so neighbouring scenes drift in different directions (not a uniform slide).
+    sign = 1.0 if (seed % 2 == 0) else -1.0
+
+    if beat == BEAT_HOOK:
+        spec = MotionSpec(
+            zoom_start=1.0, zoom_end=1.05,
+            pan_x=0.018 * sign, pan_y=-0.012,
+            sway_amp=3.0,
+        )
+    elif beat in (BEAT_TWIST1, BEAT_TWIST2):
+        spec = MotionSpec(
+            zoom_start=1.02, zoom_end=1.09,
+            pan_x=0.022 * sign, pan_y=0.010,
+            sway_amp=5.0,
+        )
+    elif beat == BEAT_CLIFFHANGER:
+        # Slow, ominous pull-back then settle; strong vignette-ish drift.
+        spec = MotionSpec(
+            zoom_start=1.10, zoom_end=1.02,
+            pan_x=-0.016 * sign, pan_y=0.018,
+            sway_amp=3.5,
+        )
+    else:
+        spec = MotionSpec()
+
+    # Reversal / twist-moment emphasis: a short decaying shake, a quick punch-in, and a
+    # brief RGB-split glitch at the cut.
+    if scene.flash or scene.cliffhanger:
+        spec = _replace_motion(
+            spec,
+            shake_amp=max(spec.shake_amp, 14.0),
+            shake_dur=0.45,
+            glitch=True,
+            punch_in=max(spec.punch_in, 0.05),
+            zoom_end=spec.zoom_end + 0.02,
+        )
+    elif scene.emphasis:
+        spec = _replace_motion(
+            spec,
+            shake_amp=max(spec.shake_amp, 7.0),
+            shake_dur=0.30,
+            glitch=True,
+            punch_in=max(spec.punch_in, 0.04),
+        )
+    return spec
+
+
+def _replace_motion(spec: MotionSpec, **changes) -> MotionSpec:
+    from dataclasses import replace
+
+    return replace(spec, **changes)
 
 
 def _lerp(a: RGB, b: RGB, f: float) -> RGB:
@@ -49,6 +155,35 @@ def _gradient(width: int, height: int, top: RGB, bottom: RGB) -> np.ndarray:
     col = top_a * (1.0 - ramp) + bot_a * ramp
     col = np.clip(col, 0, 255).astype("uint8")
     return np.broadcast_to(col, (height, width, 3)).copy()
+
+
+def _ken_burns(frame: np.ndarray, zoom: float, pan_x: float, pan_y: float) -> np.ndarray:
+    """Crop ``frame`` by ``zoom`` with a normalized (pan_x, pan_y) offset, resize back.
+
+    ``zoom`` >= 1.0 selects a centered sub-window of width/height = dim / zoom, shifted by
+    ``pan_x``/``pan_y`` (fractions of the full frame), then scales that window back up to
+    the original resolution. The output is ALWAYS exactly the input (h, w, 3) so downstream
+    compositing is unaffected regardless of zoom/pan magnitude.
+    """
+    h, w = frame.shape[0], frame.shape[1]
+    if zoom <= 1.0001 and pan_x == 0.0 and pan_y == 0.0:
+        return frame
+
+    zoom = max(1.0, float(zoom))
+    crop_w = max(1, int(round(w / zoom)))
+    crop_h = max(1, int(round(h / zoom)))
+    max_x = w - crop_w
+    max_y = h - crop_h
+    # Center the crop, then apply the normalized pan, clamped to stay inside the frame.
+    x0 = int(round(max_x / 2.0 + pan_x * w))
+    y0 = int(round(max_y / 2.0 + pan_y * h))
+    x0 = min(max(x0, 0), max_x)
+    y0 = min(max(y0, 0), max_y)
+
+    window = frame[y0:y0 + crop_h, x0:x0 + crop_w, :]
+    img = Image.fromarray(np.clip(window, 0, 255).astype("uint8"))
+    img = img.resize((w, h), Image.BILINEAR)
+    return np.asarray(img, dtype=np.float64)
 
 
 class CharacterScene(BackgroundProvider):
@@ -86,6 +221,11 @@ class CharacterScene(BackgroundProvider):
         # once per resolution; motion is applied as cheap transforms per frame.
         self._cached_wh: Optional[Tuple[int, int]] = None
         self._figure_rgba: Optional[Image.Image] = None
+        # Idle-animation variants (code-drawn figure only): eyes-closed (blink) and
+        # mouth-open (speaking). None when a real art PNG is supplied.
+        self._figure_blink: Optional[Image.Image] = None
+        self._figure_mouth: Optional[Image.Image] = None
+        self._has_drawn_face: bool = self._asset_image_path() is None
         self._base_rgb: Optional[np.ndarray] = None
 
     # -- asset image hook ---------------------------------------------------------------
@@ -96,13 +236,23 @@ class CharacterScene(BackgroundProvider):
         return None
 
     # -- illustration primitives --------------------------------------------------------
-    def _draw_figure(self, width: int, height: int) -> Image.Image:
+    def _draw_figure(
+        self,
+        width: int,
+        height: int,
+        eyes_closed: bool = False,
+        mouth_open: bool = False,
+    ) -> Image.Image:
         """Draw the stylized character bust as a transparent RGBA layer.
 
         The figure is a clean vector-style bust: shoulders in the accent wardrobe color, a
         neck, a head with a simple face, and a hair silhouette whose shape is chosen by the
         VisualSpec.hair_style token. All geometry is derived from the spec so each
         character is distinct and reproducible.
+
+        ``eyes_closed`` / ``mouth_open`` select idle-animation variants (eye-blink and a
+        small speaking mouth). They only affect the code-drawn figure; a supplied art PNG
+        is composited verbatim and ignores them.
         """
         layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
 
@@ -171,18 +321,31 @@ class CharacterScene(BackgroundProvider):
         eye_dy = int(head_r * 0.12)
         eye_dx = int(head_r * 0.42)
         eye_r = max(3, int(head_r * 0.10))
-        for sign in (-1, 1):
-            ex = head_cx + sign * eye_dx
+        lid = max(2, eye_r // 2)
+        for sgn in (-1, 1):
+            ex = head_cx + sgn * eye_dx
             ey = head_cy + eye_dy
-            draw.ellipse([ex - eye_r, ey - eye_r, ex + eye_r, ey + eye_r], fill=ink)
-        # Mouth.
+            if eyes_closed:
+                # A blink: a short lid line instead of the open eye.
+                draw.line([ex - eye_r, ey, ex + eye_r, ey], fill=ink, width=lid)
+            else:
+                draw.ellipse([ex - eye_r, ey - eye_r, ex + eye_r, ey + eye_r], fill=ink)
+        # Mouth: a thin closed line, or a small open ellipse while speaking.
         mouth_w = int(head_r * 0.34)
         my = head_cy + int(head_r * 0.52)
-        draw.line(
-            [head_cx - mouth_w // 2, my, head_cx + mouth_w // 2, my],
-            fill=_lerp(spec.skin, (120, 40, 40), 0.5),
-            width=max(2, head_r // 18),
-        )
+        mouth_col = _lerp(spec.skin, (120, 40, 40), 0.5)
+        if mouth_open:
+            mh = max(3, int(head_r * 0.14))
+            draw.ellipse(
+                [head_cx - mouth_w // 2, my - mh, head_cx + mouth_w // 2, my + mh],
+                fill=_lerp(spec.skin, (90, 30, 30), 0.65),
+            )
+        else:
+            draw.line(
+                [head_cx - mouth_w // 2, my, head_cx + mouth_w // 2, my],
+                fill=mouth_col,
+                width=max(2, head_r // 18),
+            )
 
         # Hair silhouette, shape driven by the style token so characters differ.
         self._draw_hair(draw, spec, head_cx, head_cy, head_r, height)
@@ -262,6 +425,13 @@ class CharacterScene(BackgroundProvider):
 
         self._base_rgb = base
         self._figure_rgba = self._draw_figure(width, height)
+        if self._has_drawn_face:
+            # Pre-render blink / speaking variants once; selected per-frame at render time.
+            self._figure_blink = self._draw_figure(width, height, eyes_closed=True)
+            self._figure_mouth = self._draw_figure(width, height, mouth_open=True)
+        else:
+            self._figure_blink = None
+            self._figure_mouth = None
         self._cached_wh = (width, height)
 
     def _rain_overlay(self, t: float, width: int, height: int) -> np.ndarray:
@@ -308,44 +478,105 @@ class CharacterScene(BackgroundProvider):
 
         width, height = resolution
         duration = max(0.1, float(duration))
+        dur = max(duration, 0.1)
         scene = self.scene
         rain = bool(scene and scene.rain)
         breaking = bool(scene and scene.breaking_news)
         flash = bool(scene and scene.flash)
+        is_dialog = bool(scene and scene.kind == KIND_DIALOG)
 
         if self._cached_wh != (width, height):
             self._build_base(width, height)
         breaking_band = self._breaking_news_band(width, height) if breaking else None
 
+        # Deterministic, beat-aware camera + character motion for this scene.
+        motion = motion_for_scene(scene, self.seed)
+        # Arrays cached once so make_frame stays cheap per frame.
+        fig_open = np.asarray(self._figure_rgba, dtype=np.float64)
+        fig_blink = (
+            np.asarray(self._figure_blink, dtype=np.float64)
+            if self._figure_blink is not None else None
+        )
+        fig_mouth = (
+            np.asarray(self._figure_mouth, dtype=np.float64)
+            if self._figure_mouth is not None else None
+        )
+        # Seeded phase offsets so neighbouring scenes don't breathe/blink in lockstep.
+        rng = np.random.default_rng(777 + self.seed)
+        sway_phase = float(rng.uniform(0.0, 2.0 * math.pi))
+        blink_offset = float(rng.uniform(0.0, 1.6))
+        blink_period = 2.6 + float(rng.uniform(0.0, 1.4))
+
+        def _select_figure(t: float) -> np.ndarray:
+            """Pick the idle-animation figure variant (blink / speaking) for time ``t``."""
+            if not self._has_drawn_face:
+                return fig_open
+            # Eye-blink: eyes shut for ~0.12s every blink_period seconds.
+            phase = (t + blink_offset) % blink_period
+            if fig_blink is not None and phase < 0.12:
+                return fig_blink
+            # Speaking mouth on dialog scenes: oscillate open/closed at a natural cadence.
+            if is_dialog and fig_mouth is not None:
+                if math.sin(t * 11.0 + sway_phase) > 0.35:
+                    return fig_mouth
+            return fig_open
+
         def make_frame(t: float) -> np.ndarray:
             frame = self._base_rgb.copy()
 
             # Subtle slow push: brighten slightly over the scene for a 'breathing' feel.
-            push = 1.0 + 0.04 * math.sin((t / max(duration, 0.1)) * math.pi)
+            push = 1.0 + 0.04 * math.sin((t / dur) * math.pi)
             frame = np.clip(frame * push, 0, 255)
 
-            # Composite the figure with a gentle vertical bob (parallax).
-            fig = self._figure_rgba
-            bob = int(6 * math.sin(t * 1.6))
-            fig_arr = np.array(fig).astype(np.float64)
-            if bob:
-                fig_arr = np.roll(fig_arr, bob, axis=0)
-            alpha = (fig_arr[:, :, 3:4]) / 255.0
+            # --- character idle motion -------------------------------------------------
+            # Breathing sway: a slow vertical + horizontal oscillation (handheld feel).
+            sway_y = int(round(motion.sway_amp * math.sin(t * 1.5 + sway_phase)))
+            sway_x = int(round(motion.sway_amp * 0.4 * math.sin(t * 0.9 + sway_phase)))
+            fig_arr = _select_figure(t)
+            if sway_y:
+                fig_arr = np.roll(fig_arr, sway_y, axis=0)
+            if sway_x:
+                fig_arr = np.roll(fig_arr, sway_x, axis=1)
+            alpha = fig_arr[:, :, 3:4] / 255.0
             frame = frame * (1.0 - alpha) + fig_arr[:, :, :3] * alpha
 
             if rain:
                 frame = np.clip(frame + self._rain_overlay(t, width, height), 0, 255)
 
             if breaking_band is not None:
-                b = np.array(breaking_band).astype(np.float64)
+                b = np.asarray(breaking_band, dtype=np.float64)
                 ba = b[:, :, 3:4] / 255.0
                 frame = frame * (1.0 - ba) + b[:, :, :3] * ba
+
+            # --- Ken Burns zoom + pan + handheld/shake camera --------------------------
+            prog = t / dur
+            zoom = motion.zoom_start + (motion.zoom_end - motion.zoom_start) * prog
+            # Quick punch-in over the first ~0.5s on emphasis entries.
+            if motion.punch_in and t < 0.5:
+                zoom += motion.punch_in * (1.0 - t / 0.5)
+            zoom = max(1.0, zoom)
+            pan_x = motion.pan_x * prog
+            pan_y = motion.pan_y * prog
+            # Decaying screen shake inside the shake window (reversal/twist moments).
+            if motion.shake_amp and t < motion.shake_dur:
+                decay = 1.0 - (t / motion.shake_dur)
+                pan_x += (motion.shake_amp / width) * decay * math.sin(t * 90.0)
+                pan_y += (motion.shake_amp / height) * decay * math.sin(t * 77.0 + 1.3)
+            frame = _ken_burns(frame, zoom, pan_x, pan_y)
+
+            # --- brief RGB-split glitch at the cut (reversal emphasis) -----------------
+            if motion.glitch and t < 0.18:
+                shift = int(round(10 * (1.0 - t / 0.18)))
+                if shift:
+                    frame = frame.copy()
+                    frame[:, :, 0] = np.roll(frame[:, :, 0], shift, axis=1)
+                    frame[:, :, 2] = np.roll(frame[:, :, 2], -shift, axis=1)
 
             if flash and t < 0.35:
                 f = (0.35 - t) / 0.35
                 frame = np.clip(frame + 200.0 * f, 0, 255)
 
-            return frame.astype("uint8")
+            return np.clip(frame, 0, 255).astype("uint8")
 
         return VideoClip(make_frame, duration=duration)
 
