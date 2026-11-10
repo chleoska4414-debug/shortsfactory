@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 숏폼 스튜디오</title>
+<style>
+  :root{--bg:#0f1420;--card:#1a2234;--line:#2a3550;--text:#e6ebf5;--muted:#8a95ad;
+        --accent:#4f7cff;--ok:#2ecc71;--warn:#f1c40f;--bad:#e74c3c;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif;line-height:1.5}
+  header{padding:18px 28px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:18px;font-weight:700}
+  .badge{font-size:12px;color:var(--muted)}
+  .wrap{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 61px)}
+  nav{border-right:1px solid var(--line);padding:16px}
+  nav button{display:block;width:100%;text-align:left;background:none;border:none;color:var(--muted);
+    padding:11px 14px;border-radius:9px;cursor:pointer;font-size:14px;margin-bottom:4px}
+  nav button:hover{background:var(--card);color:var(--text)}
+  nav button.active{background:var(--accent);color:#fff}
+  main{padding:26px 30px;overflow:auto}
+  h2{font-size:20px;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:18px}
+  label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+  input,select{width:100%;padding:9px 11px;background:#0d1322;border:1px solid var(--line);
+    border-radius:8px;color:var(--text);font-size:14px}
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .btn{background:var(--accent);color:#fff;border:none;padding:10px 18px;border-radius:9px;
+    cursor:pointer;font-size:14px;font-weight:600;margin-top:14px}
+  .btn.sec{background:#2a3550}
+  .btn.ok{background:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px}
+  .pill.ok{background:rgba(46,204,113,.15);color:var(--ok)}
+  .pill.bad{background:rgba(231,76,60,.15);color:var(--bad)}
+  .pill.warn{background:rgba(241,196,15,.15);color:var(--warn)}
+  .reasons{color:var(--bad);font-size:12px}
+  video{width:100%;max-width:300px;border-radius:12px;background:#000}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .log{font-family:monospace;font-size:12px;color:var(--muted);white-space:pre-wrap;
+    background:#0d1322;padding:12px;border-radius:8px;margin-top:10px;max-height:200px;overflow:auto}
+  .hide{display:none}
+  .notice{font-size:12px;color:var(--warn);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 AI 숏폼 자동 수익화 스튜디오</h1>
+  <span class="badge" id="healthBadge">상태 확인 중…</span>
+</header>
+<div class="wrap">
+  <nav>
+    <button data-tab="assets" class="active">📦 소재 관리</button>
+    <button data-tab="produce">🎞️ 영상 제작</button>
+    <button data-tab="videos">✅ 제작 현황 · 승인</button>
+    <button data-tab="status">⚙️ 시스템 상태</button>
+  </nav>
+  <main>
+    <!-- 소재 -->
+    <section id="tab-assets">
+      <h2>소재 관리</h2>
+      <p class="sub">권리가 확인되지 않은 소재는 자동으로 '사용 불가'로 표시되어 제작에서 제외됩니다. (출처 표기만으로는 사용 가능하지 않습니다)</p>
+      <div class="card">
+        <h3 style="margin-bottom:8px;font-size:15px">새 소재 등록</h3>
+        <div class="row">
+          <div><label>유형</label>
+            <select id="a_type"><option value="image">이미지</option><option value="video">영상</option><option value="music">음악</option><option value="sfx">효과음</option></select></div>
+          <div><label>제목</label><input id="a_title" placeholder="예: 맑은 하늘"></div>
+          <div><label>원저작자</label><input id="a_author" placeholder="작성자/출처"></div>
+        </div>
+        <div class="row">
+          <div><label>파일 경로</label><input id="a_file" placeholder="output/assets/sky.png"></div>
+          <div><label>출처 URL</label><input id="a_url" placeholder="https://…"></div>
+          <div><label>라이선스</label>
+            <select id="a_license"><option value="CC0">CC0</option><option value="PUBLIC_DOMAIN">퍼블릭도메인</option><option value="CC BY">CC BY</option><option value="CC BY-SA">CC BY-SA</option><option value="CC BY-NC">CC BY-NC (상업불가)</option><option value="CC BY-ND">CC BY-ND (편집불가)</option><option value="">알 수 없음</option></select></div>
+        </div>
+        <div class="row">
+          <div><label>음악 권리</label><select id="a_music"><option value="yes">확인됨</option><option value="unknown">미확인</option><option value="no">불가</option></select></div>
+          <div><label>인물 초상권</label><select id="a_person"><option value="yes">확인됨</option><option value="unknown">미확인</option><option value="no">불가</option></select></div>
+          <div><label>상표 권리</label><select id="a_trademark"><option value="yes">확인됨</option><option value="unknown">미확인</option><option value="no">불가</option></select></div>
+        </div>
+        <div class="row">
+          <div><label>이용 만료일(선택)</label><input id="a_expires" placeholder="2026-12-31"></div>
+          <div><label>허락 증빙(파일/URL)</label><input id="a_proof" placeholder="license.pdf"></div>
+          <div></div>
+        </div>
+        <button class="btn" onclick="createAsset()">소재 등록 + 권리 판정</button>
+        <div class="notice">※ 음악/초상권/상표가 '미확인'이면 전체 소재가 사용 불가로 판정됩니다.</div>
+      </div>
+      <div class="card">
+        <table><thead><tr><th>ID</th><th>유형</th><th>제목</th><th>라이선스</th><th>판정</th><th>사유</th></tr></thead>
+        <tbody id="assetRows"><tr><td colspan="6" style="color:var(--muted)">불러오는 중…</td></tr></tbody></table>
+      </div>
+    </section>
+
+    <!-- 제작 -->
+    <section id="tab-produce" class="hide">
+      <h2>영상 제작</h2>
+      <p class="sub">주제를 입력하면 대본→한국어 TTS→자막 싱크→FFmpeg 조립까지 자동으로 진행됩니다.</p>
+      <div class="card">
+        <div class="row">
+          <div><label>주제</label><input id="p_topic" placeholder="예: 아침 루틴 3가지"></div>
+          <div><label>버전</label><select id="p_version"><option value="A">A · 25~45초 (짧고 강렬)</option><option value="B">B · 65~90초 (완결형)</option></select></div>
+          <div><label>톤(음성 자동선택)</label><select id="p_tone"><option value="info">정보형(여성)</option><option value="story">스토리텔링(남성)</option><option value="doc">해설/다큐(남성)</option></select></div>
+        </div>
+        <label style="margin-top:12px"><input type="checkbox" id="p_placeholder" style="width:auto;margin-right:6px">권리확인 이미지가 없을 때 데모용 플레이스홀더 사용(검증용)</label>
+        <button class="btn" onclick="produce()">영상 제작 시작</button>
+        <div class="log hide" id="produceLog"></div>
+      </div>
+    </section>
+
+    <!-- 영상 -->
+    <section id="tab-videos" class="hide">
+      <h2>제작 현황 · 승인</h2>
+      <p class="sub">초기 운영 중에는 사용자가 승인한 영상만 게시/패키지 대상이 됩니다. 미리보기로 확인 후 승인하세요.</p>
+      <div class="grid" id="videoGrid"><p style="color:var(--muted)">불러오는 중…</p></div>
+    </section>
+
+    <!-- 상태 -->
+    <section id="tab-status" class="hide">
+      <h2>시스템 상태</h2>
+      <p class="sub">각 기능의 활성/비활성 상태입니다. 키가 없으면 가짜로 성공한 척하지 않고 '설정 필요'로 표시됩니다.</p>
+      <div class="card"><table><thead><tr><th>기능</th><th>상태</th><th>상세</th></tr></thead><tbody id="statusRows"></tbody></table></div>
+    </section>
+  </main>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  ['assets','produce','videos','status'].forEach(t=>$('#tab-'+t).classList.add('hide'));
+  $('#tab-'+b.dataset.tab).classList.remove('hide');
+  if(b.dataset.tab==='assets') loadAssets();
+  if(b.dataset.tab==='videos') loadVideos();
+  if(b.dataset.tab==='status') loadStatus();
+});
+
+async function j(url,opt){const r=await fetch(url,opt);return r.json();}
+
+async function loadHealth(){
+  try{const h=await j('/api/health');
+    $('#healthBadge').textContent='정상 · v'+h.version;}
+  catch{$('#healthBadge').textContent='서버 연결 실패';}
+}
+
+async function createAsset(){
+  const body={type:$('#a_type').value,title:$('#a_title').value,author:$('#a_author').value,
+    file_path:$('#a_file').value,source_url:$('#a_url').value,license:$('#a_license').value,
+    music_rights:$('#a_music').value,person_rights:$('#a_person').value,trademark_rights:$('#a_trademark').value,
+    expires_at:$('#a_expires').value||null,proof_ref:$('#a_proof').value};
+  await j('/api/assets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  $('#a_title').value='';loadAssets();
+}
+
+async function loadAssets(){
+  const d=await j('/api/assets');
+  const rows=d.assets.map(a=>{
+    const pill=a.usable?'<span class="pill ok">사용 가능</span>':'<span class="pill bad">사용 불가</span>';
+    const reasons=(a.reasons||[]).join(', ');
+    return `<tr><td>${a.id}</td><td>${a.type}</td><td>${a.title||'-'}</td><td>${a.license||'미확인'}</td><td>${pill}</td><td class="reasons">${reasons}</td></tr>`;
+  }).join('');
+  $('#assetRows').innerHTML=rows||'<tr><td colspan="6" style="color:var(--muted)">등록된 소재가 없습니다</td></tr>';
+}
+
+async function produce(){
+  const log=$('#produceLog');log.classList.remove('hide');log.textContent='제작 중… (TTS/조립에 수십 초 걸릴 수 있습니다)';
+  const body={topic:$('#p_topic').value,version:$('#p_version').value,tone:$('#p_tone').value,
+    allow_placeholder_images:$('#p_placeholder').checked};
+  const d=await j('/api/produce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  log.textContent=(d.messages||[]).join('\n');
+  if(d.ok){log.textContent+='\n\n✅ 완료! "제작 현황·승인" 탭에서 미리보기하세요.';}
+}
+
+async function loadVideos(){
+  const d=await j('/api/videos');
+  if(!d.videos.length){$('#videoGrid').innerHTML='<p style="color:var(--muted)">아직 제작된 영상이 없습니다</p>';return;}
+  $('#videoGrid').innerHTML=d.videos.map(v=>{
+    const st=v.status==='approved'?'<span class="pill ok">승인됨</span>':`<span class="pill warn">${v.status}</span>`;
+    const btn=v.status==='approved'?'':`<button class="btn ok" onclick="approve(${v.id})">승인</button>`;
+    return `<div class="card"><video controls src="/api/videos/${v.id}/file"></video>
+      <h3 style="font-size:14px;margin-top:10px">${v.title} ${st}</h3>
+      <div style="color:var(--muted);font-size:12px">버전 ${v.version} · ${(v.duration||0).toFixed(1)}초 · ${v.resolution}</div>
+      <div style="font-size:12px;margin-top:6px">${(v.hashtags||[]).join(' ')}</div>${btn}</div>`;
+  }).join('');
+}
+
+async function approve(id){await j('/api/videos/'+id+'/approve',{method:'POST'});loadVideos();}
+
+async function loadStatus(){
+  const h=await j('/api/health');
+  $('#statusRows').innerHTML=Object.entries(h.features).map(([k,v])=>
+    `<tr><td>${k}</td><td>${v.enabled?'<span class="pill ok">활성</span>':'<span class="pill bad">비활성</span>'}</td><td style="color:var(--muted)">${v.detail}</td></tr>`).join('');
+}
+
+loadHealth();loadAssets();
+</script>
+</body>
+</html>
