@@ -72,17 +72,59 @@ def generate(
     return result
 
 
+def _load_series_bible(episode_id: str) -> str:
+    """Return the series bible text used as context for an AI episode generator.
+
+    Reads ``stories/<episode_id>/bible.md`` when present (ep01 ships one). Returns an
+    empty string if no bible file is found; the AI provider still has the prior
+    cliffhanger to work from.
+    """
+    candidates = [
+        os.path.join("stories", episode_id, "bible.md"),
+        os.path.join("stories", "ep01", "bible.md"),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as fh:
+                    return fh.read()
+            except OSError:
+                continue
+    return ""
+
+
+def _previous_cliffhanger(episode_id: str) -> str:
+    """Return a short summary of the prior episode's cliffhanger for AI continuation.
+
+    Uses the authored ep01 cliffhanger scene text when available so an AI provider can
+    generate a coherent next episode. Falls back to an empty string (first episode).
+    """
+    try:
+        from .story.episodes import get_episode
+        from .story.model import BEAT_CLIFFHANGER
+
+        episode = get_episode(episode_id)
+    except Exception:
+        return ""
+    lines = [s.text for s in episode.scenes if s.beat_label == BEAT_CLIFFHANGER]
+    return " ".join(lines).strip()
+
+
 def generate_episode(
     episode_id: str,
     out_path: str,
     tts_name: Optional[str] = None,
+    script_name: Optional[str] = None,
     config: Optional[Config] = None,
 ) -> str:
     """Render a scene-based micro-drama Episode to ``out_path``.
 
-    Looks up the Episode from ``story/episodes.py``, resolves the TTS provider via the
-    existing factory (default offline 'tone'), and calls the scene renderer. The knowledge
-    card path (``generate``) is untouched. Returns the output path.
+    By default (no ``script_name``, or 'template') the Episode is loaded from the authored
+    data in ``story/episodes.py`` exactly as before. When an AI script provider ('openai'
+    or 'anthropic') is selected, the Episode is instead GENERATED from the series bible +
+    the prior episode's cliffhanger via that provider's ``generate_episode``. Either way a
+    real Episode flows into the same offline scene renderer. The knowledge-card path
+    (``generate(topic, n_cards)``) is untouched. Returns the output path.
     """
     from .render.story_compositor import render_episode
     from .story.episodes import get_episode
@@ -90,7 +132,18 @@ def generate_episode(
     config = config or Config.load()
     tts_name = tts_name or config.tts_provider
 
-    episode = get_episode(episode_id)
+    # Resolve the Episode: authored data by default, AI-generated when an AI provider is
+    # selected. 'template' and None both mean "use the authored episode" (the card
+    # 'template' provider has no episode path, so it is not invoked here).
+    key = (script_name or "").strip().lower()
+    if key in ("openai", "anthropic"):
+        provider = get_script_provider(key)
+        bible = _load_series_bible(episode_id)
+        prev = _previous_cliffhanger(episode_id)
+        logger.info("Generating episode via '%s' script provider.", key)
+        episode = provider.generate_episode(bible, prev)
+    else:
+        episode = get_episode(episode_id)
     logger.info(
         "Rendering episode: id=%s title=%s scenes=%d ~%.1fs tts=%s -> %s",
         episode.id,

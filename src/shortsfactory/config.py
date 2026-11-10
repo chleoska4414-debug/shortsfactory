@@ -67,6 +67,7 @@ class Config:
     edge_tts_voice: str = "en-US-AriaNeural"
     pexels_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
     font_path: Optional[str] = field(default_factory=_default_font_path)
 
     @classmethod
@@ -105,5 +106,6 @@ class Config:
             or "en-US-AriaNeural",
             pexels_api_key=os.getenv("PEXELS_API_KEY") or None,
             openai_api_key=os.getenv("OPENAI_API_KEY") or None,
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY") or None,
             font_path=font_path,
         )

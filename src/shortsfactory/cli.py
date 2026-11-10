@@ -75,6 +75,16 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=["tone", "edge", "gtts"],
         help="TTS provider (default: from config / 'tone').",
     )
+    ep.add_argument(
+        "--provider-script",
+        default=None,
+        choices=["template", "openai", "anthropic"],
+        help=(
+            "Episode source (default: 'template' = authored offline episode). "
+            "'openai'/'anthropic' generate the episode from the series bible + prior "
+            "cliffhanger and require an API key + outbound internet."
+        ),
+    )
 
     sub.add_parser("episodes", help="List available micro-drama episodes.")
     return parser
@@ -112,6 +122,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 episode_id=args.episode,
                 out_path=out_path,
                 tts_name=args.provider_tts,
+                script_name=args.provider_script,
                 config=config,
             )
         except (KeyError, ValueError) as exc:
