@@ -40,13 +40,15 @@ def test_orchestrator_reports_when_stock_disabled(tmp_path):
     init_db(db)
     conn = get_connection(db)
     try:
+        # 생성배경도 꺼서 '스톡 비활성 → 부족 중단' 경로만 검증
         r = produce_video(
             conn, "테스트", version="A",
             work_dir=str(tmp_path / "out"),
             allow_placeholder_images=False,
             fetch_stock=True,
+            use_generated_backgrounds=False,
         )
-        # 키 없음 → 스톡 보충 실패 → 소재 부족으로 중단
+        # 키 없음 → 스톡 보충 실패 → (생성배경 비활성) → 소재 부족으로 중단
         assert r.ok is False
         assert any("PEXELS_API_KEY" in m for m in r.messages)
     finally:

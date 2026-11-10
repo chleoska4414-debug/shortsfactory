@@ -131,12 +131,28 @@ def test_ass_uses_korean_font():
 
 @needs_media
 def test_pipeline_blocks_without_usable_images(conn, tmp_path):
-    # 플레이스홀더 비허용 + 권리확인 이미지 없음 → 제작 중단 (요구사항 3.8)
+    # 생성배경·스톡·플레이스홀더 모두 비활성 + 권리확인 이미지 없음 → 제작 중단 (요구사항 3.8)
     from app.pipeline.orchestrator import produce_video
 
     r = produce_video(
         conn, "소재부족 테스트", version="A",
         work_dir=str(tmp_path / "out2"), allow_placeholder_images=False,
+        fetch_stock=False, use_generated_backgrounds=False,
     )
     assert r.ok is False
     assert any("부족" in m for m in r.messages)
+
+
+@needs_media
+def test_pipeline_uses_generated_backgrounds(conn, tmp_path):
+    # 소재가 없어도 생성 그라데이션 배경으로 영상이 완성돼야 한다 (플레이스홀더 없이)
+    from app.pipeline.orchestrator import produce_video
+
+    r = produce_video(
+        conn, "배경 생성 테스트", version="A",
+        work_dir=str(tmp_path / "out3"), allow_placeholder_images=False,
+        fetch_stock=False, use_generated_backgrounds=True,
+    )
+    assert r.ok is True
+    assert r.output_path and r.duration > 0
+    assert any("그라데이션 배경" in m for m in r.messages)

@@ -107,6 +107,7 @@
           <div><label>톤(음성 자동선택)</label><select id="p_tone"><option value="info">정보형(여성)</option><option value="story">스토리텔링(남성)</option><option value="doc">해설/다큐(남성)</option></select></div>
         </div>
         <label style="margin-top:12px"><input type="checkbox" id="p_stock" checked style="width:auto;margin-right:6px">배경 부족 시 무료 스톡(Pexels)에서 자동 수집 (API 키 필요 · 상업 이용 무료)</label>
+        <label><input type="checkbox" id="p_gradient" checked style="width:auto;margin-right:6px">소재가 없으면 직접 생성한 그라데이션 배경 사용 (키 불필요 · 저작권 문제 없음)</label>
         <label><input type="checkbox" id="p_placeholder" style="width:auto;margin-right:6px">그래도 부족하면 데모용 단색 플레이스홀더 사용(검증용)</label>
         <button class="btn" onclick="produce()">영상 제작 시작</button>
         <div class="log hide" id="produceLog"></div>
@@ -170,7 +171,8 @@ async function loadAssets(){
 async function produce(){
   const log=$('#produceLog');log.classList.remove('hide');log.textContent='제작 중… (TTS/조립에 수십 초 걸릴 수 있습니다)';
   const body={topic:$('#p_topic').value,version:$('#p_version').value,tone:$('#p_tone').value,
-    allow_placeholder_images:$('#p_placeholder').checked,fetch_stock:$('#p_stock').checked};
+    allow_placeholder_images:$('#p_placeholder').checked,fetch_stock:$('#p_stock').checked,
+    use_generated_backgrounds:$('#p_gradient').checked};
   const d=await j('/api/produce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   log.textContent=(d.messages||[]).join('\n');
   if(d.ok){log.textContent+='\n\n✅ 완료! "제작 현황·승인" 탭에서 미리보기하세요.';}

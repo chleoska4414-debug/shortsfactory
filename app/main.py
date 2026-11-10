@@ -62,6 +62,7 @@ class ProduceIn(BaseModel):
     tone: str = "info"
     allow_placeholder_images: bool = False
     fetch_stock: bool = True
+    use_generated_backgrounds: bool = True
 
 
 class QCIn(BaseModel):
@@ -110,6 +111,7 @@ def api_produce(payload: ProduceIn) -> dict:
             conn, payload.topic, version=payload.version, tone=payload.tone,
             allow_placeholder_images=payload.allow_placeholder_images,
             fetch_stock=payload.fetch_stock,
+            use_generated_backgrounds=payload.use_generated_backgrounds,
         )
         if not result.ok:
             return {"ok": False, "messages": result.messages}

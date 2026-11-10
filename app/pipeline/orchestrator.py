@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.assets_repo import select_usable_assets
+from app.pipeline.backgrounds import generate_gradient_backgrounds
 from app.pipeline.compose import compose_video
 from app.pipeline.subtitles import build_cues, write_ass, write_srt
 from app.providers.script import get_script_provider
@@ -45,6 +46,7 @@ def produce_video(
     bgm_asset: dict | None = None,
     allow_placeholder_images: bool = False,
     fetch_stock: bool = True,
+    use_generated_backgrounds: bool = True,
 ) -> ProduceResult:
     version = version.upper()
     messages: list[str] = []
@@ -95,6 +97,18 @@ def produce_video(
             usable_images = select_usable_assets(conn, asset_type="image")
             image_paths = [a["file_path"] for a in usable_images if a.get("file_path")][:needed]
             used_asset_ids = [a["id"] for a in usable_images if a.get("file_path")][:needed]
+
+    # 4-c) 아직 부족하면 프로그램이 직접 생성한 그라데이션 배경으로 보충.
+    #      직접 생성물이라 제3자 권리 문제가 없어 플레이스홀더보다 우선한다.
+    if len(image_paths) < needed and use_generated_backgrounds:
+        shortfall = needed - len(image_paths)
+        bgs = generate_gradient_backgrounds(shortfall, str(work / "_bg"))
+        if bgs:
+            image_paths += bgs
+            messages.append(
+                f"권리확인 소재 부족 {shortfall}개 → 직접 생성한 그라데이션 배경으로 보충 "
+                f"(지식카드형, 저작권 문제 없음)."
+            )
 
     if len(image_paths) < needed:
         shortfall = needed - len(image_paths)
