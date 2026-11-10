@@ -18,6 +18,12 @@ from app.assets_repo import create_asset, list_assets, select_usable_assets
 from app.config import get_settings
 from app.db import get_connection, init_db
 from app.pipeline.orchestrator import produce_video
+from app.publish.package import (
+    PublishError,
+    create_package,
+    list_uploads,
+    record_upload,
+)
 from app.qc import run_qc
 from app.qc.checks import get_qc_results
 from app.videos_repo import list_videos, save_video, set_status
@@ -27,10 +33,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 app = FastAPI(title="AI 숏폼 자동 수익화 스튜디오", version=__version__)
 
 
+# 출력 디렉터리는 mount 이전에 반드시 존재해야 하므로 import 시점에 생성한다.
+(BASE_DIR / "output").mkdir(exist_ok=True)
+
+
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
-    (BASE_DIR / "output").mkdir(exist_ok=True)
 
 
 # 완성 영상/산출물 정적 서빙 (미리보기용)
@@ -190,6 +199,51 @@ def api_video_file(video_id: int):
     if not v or not v.get("file_path") or not Path(v["file_path"]).exists():
         raise HTTPException(404, "영상 파일이 없습니다")
     return FileResponse(v["file_path"], media_type="video/mp4")
+
+
+# ---------- 게시 / 업로드 패키지 (요구사항 6) ----------
+
+@app.post("/api/videos/{video_id}/package")
+def api_create_package(video_id: int) -> dict:
+    # 승인된 영상만 패키지 생성. 각 플랫폼에 'packaged'로 기록(중복 방지).
+    conn = get_connection()
+    try:
+        try:
+            result = create_package(conn, video_id)
+        except PublishError as e:
+            raise HTTPException(400, str(e))
+        for platform in ("youtube", "instagram", "tiktok"):
+            record_upload(conn, video_id, platform, status="packaged")
+        return {"package": result, "uploads": list_uploads(conn, video_id)}
+    finally:
+        conn.close()
+
+
+@app.get("/api/videos/{video_id}/package/download")
+def api_download_package(video_id: int):
+    # 생성된 패키지 ZIP 다운로드
+    conn = get_connection()
+    try:
+        from app.videos_repo import get_video
+        v = get_video(conn, video_id)
+    finally:
+        conn.close()
+    if not v:
+        raise HTTPException(404, "영상을 찾을 수 없습니다")
+    zip_path = BASE_DIR / "package" / f"video_{video_id}_{v.get('version', '')}.zip"
+    if not zip_path.exists():
+        raise HTTPException(404, "패키지가 아직 생성되지 않았습니다. 먼저 패키지를 생성하세요.")
+    return FileResponse(str(zip_path), media_type="application/zip",
+                        filename=zip_path.name)
+
+
+@app.get("/api/videos/{video_id}/uploads")
+def api_list_uploads(video_id: int) -> dict:
+    conn = get_connection()
+    try:
+        return {"uploads": list_uploads(conn, video_id)}
+    finally:
+        conn.close()
 
 
 # ---------- 대시보드 ----------

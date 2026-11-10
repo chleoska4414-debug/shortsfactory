@@ -182,16 +182,48 @@ async function loadVideos(){
   const d=await j('/api/videos');
   if(!d.videos.length){$('#videoGrid').innerHTML='<p style="color:var(--muted)">아직 제작된 영상이 없습니다</p>';return;}
   $('#videoGrid').innerHTML=d.videos.map(v=>{
-    const st=v.status==='approved'?'<span class="pill ok">승인됨</span>':`<span class="pill warn">${v.status}</span>`;
-    const btn=v.status==='approved'?'':`<button class="btn ok" onclick="approve(${v.id})">승인</button>`;
+    let stPill;
+    if(v.status==='approved') stPill='<span class="pill ok">승인됨</span>';
+    else if(v.status==='held') stPill='<span class="pill bad">보류(검수 실패)</span>';
+    else if(v.status==='published') stPill='<span class="pill ok">게시 패키지 생성됨</span>';
+    else stPill=`<span class="pill warn">${v.status}</span>`;
+    const qcBtn=`<button class="btn sec" onclick="runQc(${v.id})">품질 검수</button>`;
+    const approveBtn=v.status==='approved'||v.status==='published'?'':`<button class="btn ok" onclick="approve(${v.id})">승인</button>`;
+    const pkgBtn=(v.status==='approved'||v.status==='published')?`<button class="btn" onclick="makePackage(${v.id})">업로드 패키지 생성</button>`:'';
     return `<div class="card"><video controls src="/api/videos/${v.id}/file"></video>
-      <h3 style="font-size:14px;margin-top:10px">${v.title} ${st}</h3>
+      <h3 style="font-size:14px;margin-top:10px">${v.title} ${stPill}</h3>
       <div style="color:var(--muted);font-size:12px">버전 ${v.version} · ${(v.duration||0).toFixed(1)}초 · ${v.resolution}</div>
-      <div style="font-size:12px;margin-top:6px">${(v.hashtags||[]).join(' ')}</div>${btn}</div>`;
+      <div style="font-size:12px;margin-top:6px">${(v.hashtags||[]).join(' ')}</div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">${qcBtn}${approveBtn}${pkgBtn}</div>
+      <div class="log hide" id="vlog${v.id}"></div></div>`;
   }).join('');
 }
 
 async function approve(id){await j('/api/videos/'+id+'/approve',{method:'POST'});loadVideos();}
+
+async function runQc(id){
+  const log=$('#vlog'+id);log.classList.remove('hide');log.textContent='검수 중…';
+  const d=await j('/api/videos/'+id+'/qc',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  const qc=d.qc;
+  const lines=(qc.results||qc.outcomes||[]).map(o=>{
+    const r=o.result; const mark=r==='pass'?'✅':(r==='warn'?'⚠️':'❌');
+    return `${mark} ${o.check_name}: ${o.detail}`;
+  });
+  log.textContent=`[종합: ${qc.verdict||qc.status||'완료'}]\n`+lines.join('\n');
+  loadVideosSoft();
+}
+
+async function makePackage(id){
+  const log=$('#vlog'+id);log.classList.remove('hide');log.textContent='패키지 생성 중…';
+  const r=await fetch('/api/videos/'+id+'/package',{method:'POST'});
+  if(!r.ok){const e=await r.json();log.textContent='❌ '+(e.detail||'패키지 생성 실패 (먼저 승인하세요)');return;}
+  const d=await r.json();
+  log.textContent='✅ '+d.package.message+'\n파일: '+(d.package.files||[]).join(', ')+
+    '\n\n[다운로드] 아래 버튼으로 ZIP을 받으세요.';
+  log.innerHTML+=`<br><a class="btn" style="display:inline-block;text-decoration:none;margin-top:8px" href="/api/videos/${id}/package/download">패키지 ZIP 다운로드</a>`;
+}
+
+async function loadVideosSoft(){/* QC 후 상태만 갱신 */ setTimeout(loadVideos, 400);}
 
 async function loadStatus(){
   const h=await j('/api/health');
