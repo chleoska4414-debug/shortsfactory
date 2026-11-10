@@ -53,6 +53,13 @@ def _make_gtts(lang: str = "en", **_kw) -> TTSProvider:
     return GTTSProvider(lang=lang)
 
 
+def _make_windows_korean(**_kw) -> TTSProvider:
+    from .windows_korean import WindowsKoreanTTS
+
+    return WindowsKoreanTTS()
+
+
+register_tts_provider("windows-ko", _make_windows_korean)
 register_tts_provider("edge", _make_edge)
 register_tts_provider("gtts", _make_gtts)
 

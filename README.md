@@ -168,8 +168,15 @@ For real narration instead of the offline placeholder, add the free neural voice
 python -m shortsfactory episode --episode ep01 --out out/ep01.mp4 --provider-tts edge
 ```
 
-`--provider-tts` accepts the same options as the card mode (`tone` offline default,
-`edge`, `gtts`).
+For offline Korean speech on Windows, install a Korean desktop SAPI voice
+(such as Microsoft Heami) and select `windows-ko`:
+
+```powershell
+python -m shortsfactory episode --episode ep01 --provider-script template --provider-tts windows-ko --out out/ep01-voiced.mp4
+```
+
+The narrator and dialogue roles share the installed voice with different pitch
+and speaking rates. The default provider is `tone`.
 
 ### Directed motion and camera (offline)
 

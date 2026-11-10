@@ -90,6 +90,7 @@ class Scene:
     # Optional facial expression override for the code-drawn figure: 'neutral', 'angry',
     # 'shock', 'resigned' or 'worried'. When None it is derived from the beat/flags.
     expression: Optional[str] = None
+    reveal_photo: bool = False  # stage a torn card and a falling photograph
 
     def staged_figure_id(self) -> Optional[str]:
         """Return the character id whose figure should be drawn for this scene."""

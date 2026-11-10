@@ -36,7 +36,7 @@ def _build_parser() -> argparse.ArgumentParser:
     gen.add_argument(
         "--provider-tts",
         default=None,
-        choices=["tone", "edge", "gtts"],
+        choices=["tone", "windows-ko", "edge", "gtts"],
         help="TTS provider (default: from config / 'tone').",
     )
     gen.add_argument(
@@ -72,7 +72,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ep.add_argument(
         "--provider-tts",
         default=None,
-        choices=["tone", "edge", "gtts"],
+        choices=["tone", "windows-ko", "edge", "gtts"],
         help="TTS provider (default: from config / 'tone').",
     )
     ep.add_argument(

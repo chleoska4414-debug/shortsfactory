@@ -109,3 +109,36 @@ def test_same_character_is_consistent_across_scenes():
     a = CharacterScene(female).make_clip(2.0, res).get_frame(0.0)
     b = CharacterScene(female).make_clip(2.0, res).get_frame(0.0)
     assert np.array_equal(a, b)
+
+def test_cliffhanger_caption_leaves_face_and_props_clear():
+    import numpy as np
+
+    from shortsfactory.render.story_compositor import _scene_overlay
+
+    scene = get_episode("ep01").scenes[-1]
+    size = (540, 960)
+    overlay = np.asarray(_scene_overlay(scene, None, (150, 35, 55), size, Config().font_path))
+    assert np.all(overlay[:int(size[1] * 0.66), :, 3] == 70)
+    assert np.count_nonzero(overlay[int(size[1] * 0.66):, :, 0] > 220) > 100
+
+
+def test_reveal_photo_falls_and_repeated_frames_match(monkeypatch):
+    import numpy as np
+
+    from shortsfactory.background import character
+
+    episode = get_episode("ep01")
+    scene = episode.scenes[-1]
+    actor = episode.character(scene.staged_figure_id())
+    # Keep the stage coordinates unchanged so we can measure the photograph's travel.
+    monkeypatch.setattr(character, "_ken_burns", lambda frame, *args: frame)
+    clip = character.CharacterScene(actor, scene, seed=scene.index).make_clip(7, (270, 480))
+    try:
+        early, late = (clip.get_frame(t) for t in (0.5, 1.6))
+        assert np.array_equal(late, clip.get_frame(1.6))
+        paper = (247, 222, 174)
+        early_y = np.where((early == paper).all(axis=2))[0]
+        late_y = np.where((late == paper).all(axis=2))[0]
+        assert np.median(late_y) - np.median(early_y) > 10
+    finally:
+        clip.close()

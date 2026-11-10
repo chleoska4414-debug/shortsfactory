@@ -210,6 +210,7 @@ def _ep01() -> Episode:
             target_duration_sec=7.0,
             figure_id="haeun",
             cliffhanger=True,
+            reveal_photo=True,
         ),
     ]
 

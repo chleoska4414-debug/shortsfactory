@@ -278,12 +278,49 @@ class CharacterScene(BackgroundProvider):
                 pass
 
         role = self.character.role if self.character is not None else "supporting"
-        return render_figure(
+        figure = render_figure(
             spec, role, width, height,
             expression=self._expression(),
             eyes_closed=eyes_closed, mouth_open=mouth_open,
             cache=self._fig_cache,
         )
+
+        if self.scene and self.scene.reveal_photo:
+            self._draw_torn_card(figure)
+        return figure
+
+    def _draw_torn_card(self, figure: Image.Image) -> None:
+        draw = ImageDraw.Draw(figure)
+        width, height = figure.size
+        x = width * self._visual.anchor_x
+        r = width * 0.16
+        y = height * 0.385 + r * 1.18
+
+        def points(vertices):
+            return [(x + r * dx, y + r * dy) for dx, dy in vertices]
+
+        ink = (55, 31, 31)
+        # Ragged edge at the end of the business card, just above her fingers.
+        draw.polygon(points([(-2.07, -0.10), (-1.59, -0.29), (-1.63, -0.12),
+                             (-1.55, -0.04), (-1.65, 0.03), (-1.62, 0.17),
+                             (-1.93, 0.26)]), fill=(248, 234, 209), outline=ink, width=max(1, int(r * 0.018)))
+        draw.line(points([(-1.96, -0.04), (-1.75, -0.13)]), fill=ink, width=max(1, int(r * 0.025)))
+
+    @staticmethod
+    def _photo_sprite(r: float) -> np.ndarray:
+        photo = Image.new("RGBA", (max(1, round(r * 0.76)), max(1, round(r * 0.84))))
+        draw = ImageDraw.Draw(photo)
+
+        def points(vertices):
+            return [(r * x, r * y) for x, y in vertices]
+
+        draw.polygon(points([(0.19, 0.01), (0.74, 0.17), (0.56, 0.80), (0.01, 0.64)]),
+                     fill=(247, 222, 174), outline=(55, 31, 31), width=max(1, int(r * 0.023)))
+        draw.polygon(points([(0.23, 0.09), (0.66, 0.22), (0.53, 0.69), (0.11, 0.56)]),
+                     fill=(126, 88, 61))
+        draw.polygon(points([(0.28, 0.22), (0.51, 0.28), (0.47, 0.43), (0.34, 0.53), (0.25, 0.38)]),
+                     fill=(239, 201, 124))
+        return np.asarray(photo, dtype=np.float64)
 
     def _expression(self) -> str:
         """Pick the facial expression from the scene (explicit override, else beat/flags)."""
@@ -454,6 +491,10 @@ class CharacterScene(BackgroundProvider):
             np.asarray(self._figure_mouth, dtype=np.float64)
             if self._figure_mouth is not None else None
         )
+        r = width * 0.16
+        photo = self._photo_sprite(r) if scene and scene.reveal_photo else None
+        photo_x = width * self._visual.anchor_x - r * 1.76
+        photo_y = height * 0.385 + r * 1.50
         # Seeded phase offsets so neighbouring scenes don't breathe/blink in lockstep.
         rng = np.random.default_rng(777 + self.seed)
         sway_phase = float(rng.uniform(0.0, 2.0 * math.pi))
@@ -492,6 +533,17 @@ class CharacterScene(BackgroundProvider):
                 fig_arr = np.roll(fig_arr, sway_x, axis=1)
             alpha = fig_arr[:, :, 3:4] / 255.0
             frame = frame * (1.0 - alpha) + fig_arr[:, :, :3] * alpha
+
+            if photo is not None:
+                fall = min(1.0, max(0.0, (t - 0.55) / 0.85)) ** 2
+                px = int(photo_x + sway_x + r * 0.15 * fall)
+                py = int(photo_y + sway_y + r * 0.42 * fall)
+                x0, y0 = max(0, px), max(0, py)
+                x1, y1 = min(width, px + photo.shape[1]), min(height, py + photo.shape[0])
+                if x1 > x0 and y1 > y0:
+                    patch = photo[y0 - py:y1 - py, x0 - px:x1 - px]
+                    opacity = patch[:, :, 3:4] / 255
+                    frame[y0:y1, x0:x1] = frame[y0:y1, x0:x1] * (1 - opacity) + patch[:, :, :3] * opacity
 
             if rain:
                 frame = np.clip(frame + self._rain_overlay(t, width, height), 0, 255)

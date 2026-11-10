@@ -108,16 +108,17 @@ def _cliffhanger_overlay(scene, accent, resolution, font_path):
     # Darken the whole frame slightly so the card punches.
     draw.rectangle([0, 0, width, height], fill=(0, 0, 0, 70))
 
-    band_h = int(height * 0.40)
+    band_h = int(height * 0.22)
     caption = render_caption(
         scene.text,
         (width, band_h),
         font_path=font_path,
-        font_size=int(width * 0.078),
+        font_size=int(width * 0.049),
         text_color=(255, 245, 230, 255),
         stroke_color=(0, 0, 0, 255),
     )
-    y = int(height * 0.30)
+    y = int(height * 0.66)
+    draw.rectangle([0, y, width, height], fill=(12, 9, 16, 205))
     overlay.alpha_composite(caption, (0, y))
 
     # Accent rule + teaser tag near the bottom.
@@ -126,8 +127,8 @@ def _cliffhanger_overlay(scene, accent, resolution, font_path):
     bbox = draw.textbbox((0, 0), teaser, font=font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
-    ty = int(height * 0.80)
-    rule_y = ty - int(height * 0.03)
+    ty = int(height * 0.91)
+    rule_y = ty - int(height * 0.015)
     draw.rectangle([int(width * 0.30), rule_y, int(width * 0.70), rule_y + 6],
                    fill=(accent[0], accent[1], accent[2], 255))
     tx = (width - tw) // 2
@@ -190,9 +191,14 @@ def render_episode(
     audio_clips = []
 
     try:
+        scene_synth = getattr(tts_provider, "synthesize_scene", None)
         for i, scene in enumerate(scene_list):
+            speaker = episode.character(scene.speaker_id)
             wav_path = os.path.join(tmp_dir, f"scene_{i:03d}.wav")
-            _, audio_dur = tts_provider.synthesize(scene.text, wav_path)
+            if scene_synth is None:
+                _, audio_dur = tts_provider.synthesize(scene.text, wav_path)
+            else:
+                _, audio_dur = scene_synth(scene.text, wav_path, speaker.role if speaker else None)
             aclip = AudioFileClip(wav_path)
             opened_audio.append(aclip)
             # Scene length is driven by the longer of target vs actual audio so pacing is
@@ -204,7 +210,6 @@ def render_episode(
             staged_id = scene.staged_figure_id()
             character = episode.character(staged_id)
             accent = character.visual.accent if character else (200, 60, 60)
-            speaker = episode.character(scene.speaker_id)
             speaker_name = speaker.display_name if speaker else None
 
             bg = CharacterScene(character=character, scene=scene, seed=scene.index)

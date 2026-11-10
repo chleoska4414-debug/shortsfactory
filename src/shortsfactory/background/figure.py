@@ -256,6 +256,8 @@ class _Figure:
                             (cx - sw * 0.43, ttop + r * 0.25), (cx - sw * 0.49, ttop + r * 0.7),
                             (cx - sw * 0.51, ttop + r * 1.55), (cx - sw * 0.47, tb + r)])
             right = [(2 * cx - x, y) for x, y in reversed(left)]
+            if self.raises_hand:
+                left = [(x, y - r * 0.12 * max(0, 1 - abs(y - ttop) / r)) for x, y in left]
             d.polygon(left + right, fill=255)
 
         jacket = p.part(torso, cloth, cloth_sh, cloth_hi, off=off)
