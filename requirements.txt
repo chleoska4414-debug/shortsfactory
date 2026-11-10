@@ -1,7 +1,20 @@
-# Core runtime dependencies (mirror of pyproject.toml [project].dependencies).
-# Optional network providers live in the 'providers' extra: pip install -e ".[providers]"
-moviepy>=2.1.1
-imageio-ffmpeg>=0.5
-pillow>=10.1
-numpy>=1.26
+# 코어
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+pydantic-settings>=2.2
 python-dotenv>=1.0
+jinja2>=3.1
+python-multipart>=0.0.9
+requests>=2.31
+edge-tts>=6.1
+
+# 테스트
+pytest>=8.0
+httpx>=0.27
+
+# 선택(확장 단계에서 사용, MVP 코어 동작엔 불필요):
+#   openai-whisper  (로컬 자막/STT)
+#   edge-tts        (무료 TTS)
+#   google-api-python-client  (YouTube Data API)
+# FFmpeg/ffprobe 는 pip 패키지가 아니라 OS에 설치된 바이너리를 사용합니다.

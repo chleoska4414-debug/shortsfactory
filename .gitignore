@@ -1,34 +1,31 @@
-# Virtual environments
+# 민감정보 — 절대 커밋 금지
+.env
+*.key
+secrets/
+tokens/
+
+# Python
+__pycache__/
+*.py[cod]
 .venv/
 venv/
-
-# Python caches / build artifacts
-__pycache__/
-*.pyc
+env/
 *.egg-info/
-build/
-dist/
 .pytest_cache/
 
-# Generated media and cached assets
-out/
-assets/cache/
-*.mp4
-*.wav
-*.mp3
+# 데이터/산출물 (로컬 전용)
+*.sqlite3
+*.db
+data/
+output/
+package/
+assets_store/
+tmp/
+*.log
 
-# Keep the committed sample short for preview (exception to *.mp4 above)
-!samples/
-!samples/space-sample.mp4
-!samples/ep01.mp4
+# 로컬 바이너리 도구 (FFmpeg 등 — 커밋하지 않음)
+.tools/
 
-# User/AI-supplied character art is user content; keep it out of the tree.
-# The directory convention is documented in background/image_provider.py.
-assets/characters/
-
-# Local environment / secrets
-.env
-
-# Sandbox / tooling artifacts (not part of the deliverable)
-.kiro/
-.agents/
+# OS
+.DS_Store
+Thumbs.db
