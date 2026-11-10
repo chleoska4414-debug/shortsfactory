@@ -278,11 +278,17 @@ class CharacterScene(BackgroundProvider):
         return np.broadcast_to(arr * 0.6, (height, width, 3))
 
     def _breaking_news_band(self, width: int, height: int) -> Image.Image:
-        """A BREAKING-NEWS lower-third band as a transparent RGBA overlay."""
+        """A BREAKING-NEWS banner as a transparent RGBA overlay.
+
+        The banner is anchored near the TOP of the frame (an upper-third news strip)
+        rather than the lower third, so it never collides with the lower-third dialog
+        caption and speaker label drawn by the story compositor. A thin accent rule sits
+        just above and below the strip to read as a broadcast chyron.
+        """
         band = Image.new("RGBA", (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(band)
         band_h = int(height * 0.10)
-        y0 = int(height * 0.70)
+        y0 = int(height * 0.12)
         red = self._visual.accent
         # Red tag + dark strip.
         draw.rectangle([0, y0, width, y0 + band_h], fill=(16, 16, 20, 235))
@@ -291,7 +297,8 @@ class CharacterScene(BackgroundProvider):
         font = _load_label_font(int(band_h * 0.46))
         draw.text((int(width * 0.04), y0 + int(band_h * 0.26)), "속보 BREAKING",
                   font=font, fill=(255, 255, 255, 255))
-        # Thin accent underline.
+        # Thin accent rules above and below the strip.
+        draw.rectangle([0, y0 - 6, width, y0], fill=(red[0], red[1], red[2], 255))
         draw.rectangle([0, y0 + band_h, width, y0 + band_h + 6],
                        fill=(red[0], red[1], red[2], 255))
         return band

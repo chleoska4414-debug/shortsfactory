@@ -138,6 +138,76 @@ TOPICS = {
 Save the file, then `python -m shortsfactory generate --topic ocean`. No other code
 changes are required.
 
+## Micro-drama (short-drama) mode
+
+Besides the knowledge-card shorts above, the tool can render a scene-based **micro-drama
+episode**: a vertical, roughly 60-second serialized short-drama with Korean dialogue,
+staged character key visuals, and a HOOK / TWIST / CLIFFHANGER structure. The card mode
+still works exactly as before; this is a second, separate render path.
+
+List the episodes that ship with the tool:
+
+```bash
+python -m shortsfactory episodes
+```
+
+Render Episode 1 to an mp4:
+
+```bash
+python -m shortsfactory episode --episode ep01 --out out/ep01.mp4
+```
+
+This writes the finished vertical 1080x1920 video to the `--out` path (default
+`out/<episode>.mp4`). Episode 1 is **걷어차인 회장님**, a subverted chaebol-heir romance in
+which the ordinary woman secretly holds the upper hand. The series bible and the
+shot-by-shot script live under [`stories/ep01/`](stories/ep01/).
+
+For real narration instead of the offline placeholder, add the free neural voice flag:
+
+```bash
+python -m shortsfactory episode --episode ep01 --out out/ep01.mp4 --provider-tts edge
+```
+
+`--provider-tts` accepts the same options as the card mode (`tone` offline default,
+`edge`, `gtts`).
+
+### Getting real "well-drawn manga" character visuals
+
+The offline default draws each character as a code-generated stylized figure built from
+that character's visual spec. It is deterministic and distinct per character, but it is a
+stand-in, not hand-drawn art. To get real webtoon / anime-style characters, supply your
+own or AI-generated art by the following drop-in convention:
+
+```
+assets/characters/<episode_id>/<character_id>.png
+```
+
+For Episode 1 that means, for example, `assets/characters/ep01/yoojin.png`,
+`assets/characters/ep01/haeun.png`, and `assets/characters/ep01/anchor.png` (the character
+ids are `yoojin`, `haeun`, and `anchor`). When a character's visual spec points at an
+existing PNG, the renderer composites that artwork instead of the code-drawn figure. These
+files are your own content and are intentionally kept out of the committed repository; only
+the directory convention ships.
+
+Alternatively, you can enable the optional OpenAI image-generation path by setting
+`OPENAI_API_KEY` in `.env`. That path needs outbound internet and a paid key; with no key
+or no network it stops with a clear error instead of producing a broken video. It is never
+used by the default offline render.
+
+### Sample episode and an honest reality note
+
+A ready-made example episode lives at [`samples/ep01.mp4`](samples/ep01.mp4). Be clear
+about what it is:
+
+- It was rendered via the **fully offline path**, so its on-screen characters are
+  **code-generated stylized illustrations**, not hand-drawn art.
+- Its narration is the synthetic **`tone` placeholder**, not a real voice.
+
+That sample exists to prove the episode engine end to end on a machine with no network and
+no media software. True "well-drawn manga" quality and real narration come from running it
+on your own computer with character art dropped in (or an image provider enabled) and the
+`edge` neural voice turned on.
+
 ## Provider options
 
 A "provider" is a swappable piece of the pipeline. There are three kinds: narration
@@ -152,7 +222,7 @@ quality.
 | Background | `gradient` (default) | Offline, free. A Pillow-rendered color gradient. | `--provider-bg gradient` or `BG_PROVIDER=gradient` |
 | Background | `pexels`   | **Opt-in / paid key**, needs internet. Royalty-free stock footage from Pexels. | `--provider-bg pexels` plus `PEXELS_API_KEY` in `.env` |
 | Script     | `template` (default) | Offline, free. Turns a topic pack into a narration script. | `--provider-script template` |
-| AI images  | (future)   | **Opt-in / paid key.** Reserved for AI-generated visuals. | set `OPENAI_API_KEY` in `.env` |
+| AI images  | (optional) | **Opt-in / paid key**, needs internet. Generates character art for the micro-drama mode; the offline default draws figures with no key. | set `OPENAI_API_KEY` in `.env` |
 
 ### Why the default is offline, and what to use instead
 
@@ -259,9 +329,11 @@ src/shortsfactory/
   tts/          narration providers (offline tone default)
   background/   visual backdrop providers (offline gradient default)
   captions/     Pillow text rendering (no ImageMagick)
-  render/       moviepy 9:16 compositor
+  render/       moviepy 9:16 compositor (card + episode)
   content/      knowledge-card topic packs (data-driven)
+  story/        micro-drama episode model + authored episodes (data-driven)
 tests/          offline unit + smoke tests
+stories/        human-readable series bible + episode scripts
 out/            rendered mp4s land here (gitignored)
 ```
 

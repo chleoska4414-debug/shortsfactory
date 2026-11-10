@@ -56,9 +56,19 @@ def test_breaking_news_band_renders():
                   text="속보", target_duration_sec=2.0, breaking_news=True)
     frame = _frame(CharacterScene(anchor, scene))
     assert frame.shape == (1920, 1080, 3)
-    # The lower-third band region should be present (non-uniform across that strip).
-    strip = frame[int(1920 * 0.70): int(1920 * 0.80)]
-    assert strip.std() > 10.0
+    # The BREAKING banner sits in the UPPER third (not the lower third) so it never
+    # collides with the lower-third dialog caption. That top strip should be non-uniform
+    # (the red tag + dark strip + white 'BREAKING' text).
+    top_strip = frame[int(1920 * 0.12): int(1920 * 0.22)]
+    assert top_strip.std() > 10.0
+    # And the lower-third caption area must be free of the banner so text stays legible.
+    # Build the same frame without breaking news and compare the lower third: with the
+    # banner moved up, the lower third should be essentially unchanged by the banner.
+    calm = Scene(index=7, beat_label="TWIST 2", kind="dialog", speaker_id=anchor.id,
+                 text="속보", target_duration_sec=2.0, breaking_news=False)
+    calm_frame = _frame(CharacterScene(anchor, calm))
+    lower = slice(int(1920 * 0.70), int(1920 * 0.80))
+    assert np.array_equal(frame[lower], calm_frame[lower])
 
 
 def test_asset_image_is_composited_when_present(tmp_path):

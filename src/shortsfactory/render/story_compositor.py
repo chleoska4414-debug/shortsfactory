@@ -68,8 +68,10 @@ def _scene_overlay(
                    fill=(0, 0, 0, 90))
     overlay.alpha_composite(caption, (0, y))
 
-    # Speaker-name label for dialog scenes, styled distinctly from narration.
-    if scene.kind == KIND_DIALOG and speaker_name:
+    # Speaker-name label for dialog scenes, styled distinctly from narration. Skip it on
+    # breaking-news scenes: the top 'BREAKING' banner already identifies the source, and a
+    # redundant lower-third pill would crowd the caption.
+    if scene.kind == KIND_DIALOG and speaker_name and not scene.breaking_news:
         _draw_speaker_label(overlay, speaker_name, accent, resolution, font_path, y)
 
     return overlay
