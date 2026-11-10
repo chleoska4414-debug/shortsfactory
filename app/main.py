@@ -59,6 +59,7 @@ class ProduceIn(BaseModel):
     version: str = "A"
     tone: str = "info"
     allow_placeholder_images: bool = False
+    fetch_stock: bool = True
 
 
 # ---------- 상태 ----------
@@ -99,6 +100,7 @@ def api_produce(payload: ProduceIn) -> dict:
         result = produce_video(
             conn, payload.topic, version=payload.version, tone=payload.tone,
             allow_placeholder_images=payload.allow_placeholder_images,
+            fetch_stock=payload.fetch_stock,
         )
         if not result.ok:
             return {"ok": False, "messages": result.messages}

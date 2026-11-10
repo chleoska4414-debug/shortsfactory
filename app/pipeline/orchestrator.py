@@ -44,6 +44,7 @@ def produce_video(
     work_dir: str = "output",
     bgm_asset: dict | None = None,
     allow_placeholder_images: bool = False,
+    fetch_stock: bool = True,
 ) -> ProduceResult:
     version = version.upper()
     messages: list[str] = []
@@ -81,6 +82,19 @@ def produce_video(
     usable_images = select_usable_assets(conn, asset_type="image")
     image_paths = [a["file_path"] for a in usable_images if a.get("file_path")][:needed]
     used_asset_ids = [a["id"] for a in usable_images if a.get("file_path")][:needed]
+
+    # 4-b) 부족하면 무료 스톡(Pexels)에서 보충 — 받은 소재도 라이선스 게이트를 통과해야 등록됨
+    if len(image_paths) < needed and fetch_stock:
+        fetched = _fetch_stock_assets(
+            conn, topic, needed - len(image_paths),
+            str(Path(work_dir) / "_stock"),
+        )
+        for msg in fetched["messages"]:
+            messages.append(msg)
+        if fetched["asset_ids"]:
+            usable_images = select_usable_assets(conn, asset_type="image")
+            image_paths = [a["file_path"] for a in usable_images if a.get("file_path")][:needed]
+            used_asset_ids = [a["id"] for a in usable_images if a.get("file_path")][:needed]
 
     if len(image_paths) < needed:
         shortfall = needed - len(image_paths)
@@ -132,6 +146,35 @@ def produce_video(
         messages=messages,
         srt_path=srt_path,
     )
+
+
+def _fetch_stock_assets(conn, query: str, count: int, out_dir: str) -> dict:
+    """Pexels 무료 스톡 이미지를 받아 소재로 등록(라이선스 게이트 통과한 것만 사용 가능).
+
+    키가 없거나 네트워크 실패 시 가짜 성공 없이 사유를 메시지로 반환한다.
+    """
+    from app.assets_repo import create_asset
+    from app.providers.stock import get_stock_provider
+
+    provider = get_stock_provider()
+    if not provider.enabled:
+        return {"asset_ids": [],
+                "messages": ["무료 스톡 배경 비활성: .env에 PEXELS_API_KEY를 설정하면 "
+                             "주제에 맞는 상업적 이용 가능 이미지를 자동 수집합니다."]}
+
+    result = provider.fetch_images(query, count, out_dir)
+    if not result.ok:
+        return {"asset_ids": [], "messages": [f"스톡 수집 실패: {result.message}"]}
+
+    asset_ids: list[int] = []
+    for i, fp in enumerate(result.file_paths):
+        src = result.source_urls[i] if result.source_urls and i < len(result.source_urls) else None
+        meta = provider.asset_metadata(fp, src, result.author)
+        asset = create_asset(conn, meta)  # 라이선스 판정 자동 수행
+        if asset["usable"]:
+            asset_ids.append(asset["id"])
+    return {"asset_ids": asset_ids,
+            "messages": [f"{result.message} → 권리판정 통과 {len(asset_ids)}개 등록"]}
 
 
 def _slug(text: str) -> str:

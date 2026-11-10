@@ -106,7 +106,8 @@
           <div><label>버전</label><select id="p_version"><option value="A">A · 25~45초 (짧고 강렬)</option><option value="B">B · 65~90초 (완결형)</option></select></div>
           <div><label>톤(음성 자동선택)</label><select id="p_tone"><option value="info">정보형(여성)</option><option value="story">스토리텔링(남성)</option><option value="doc">해설/다큐(남성)</option></select></div>
         </div>
-        <label style="margin-top:12px"><input type="checkbox" id="p_placeholder" style="width:auto;margin-right:6px">권리확인 이미지가 없을 때 데모용 플레이스홀더 사용(검증용)</label>
+        <label style="margin-top:12px"><input type="checkbox" id="p_stock" checked style="width:auto;margin-right:6px">배경 부족 시 무료 스톡(Pexels)에서 자동 수집 (API 키 필요 · 상업 이용 무료)</label>
+        <label><input type="checkbox" id="p_placeholder" style="width:auto;margin-right:6px">그래도 부족하면 데모용 단색 플레이스홀더 사용(검증용)</label>
         <button class="btn" onclick="produce()">영상 제작 시작</button>
         <div class="log hide" id="produceLog"></div>
       </div>
@@ -169,7 +170,7 @@ async function loadAssets(){
 async function produce(){
   const log=$('#produceLog');log.classList.remove('hide');log.textContent='제작 중… (TTS/조립에 수십 초 걸릴 수 있습니다)';
   const body={topic:$('#p_topic').value,version:$('#p_version').value,tone:$('#p_tone').value,
-    allow_placeholder_images:$('#p_placeholder').checked};
+    allow_placeholder_images:$('#p_placeholder').checked,fetch_stock:$('#p_stock').checked};
   const d=await j('/api/produce',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   log.textContent=(d.messages||[]).join('\n');
   if(d.ok){log.textContent+='\n\n✅ 완료! "제작 현황·승인" 탭에서 미리보기하세요.';}

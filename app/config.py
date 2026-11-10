@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     tts_api_key: str | None = None
     tts_voice: str | None = None
     youtube_api_key: str | None = None
+    pexels_api_key: str | None = None
 
     @property
     def db_file(self) -> Path:
@@ -89,6 +90,11 @@ class Settings(BaseSettings):
                 "enabled": bool(self.youtube_api_key),
                 "detail": "YouTube API 키 설정됨" if self.youtube_api_key
                 else "YouTube API 키 설정 필요 — 트렌드 분석 비활성",
+            },
+            "pexels_stock": {
+                "enabled": bool(self.pexels_api_key),
+                "detail": "Pexels API 키 설정됨 — 무료 스톡 배경 사용 가능" if self.pexels_api_key
+                else "Pexels API 키 설정 필요 — 무료 스톡 배경 비활성 (무료 발급: pexels.com/api)",
             },
         }
 
