@@ -98,6 +98,26 @@ def test_full_pipeline_produces_valid_mp4(conn, tmp_path):
     assert "1920" in vals
 
 
+def test_korean_font_bundled():
+    # 한글 자막 렌더링에 필요한 번들 폰트가 존재해야 한다(두부 현상 방지).
+    from app.pipeline.compose import FONTS_DIR
+    font = FONTS_DIR / "NanumGothic-Regular.ttf"
+    assert font.exists(), "번들 한글 폰트(NanumGothic)가 없습니다 — 자막이 깨집니다"
+    assert font.stat().st_size > 100_000
+
+
+def test_ass_uses_korean_font():
+    # ASS 스타일이 한글 폰트를 지정하는지 확인
+    from app.pipeline.subtitles import SubtitleCue, write_ass
+    import tempfile, os
+    fd, path = tempfile.mkstemp(suffix=".ass")
+    os.close(fd)
+    write_ass([SubtitleCue(0.0, 1.0, "한글 자막")], path)
+    content = open(path, encoding="utf-8").read()
+    os.unlink(path)
+    assert "NanumGothic" in content
+
+
 @needs_media
 def test_pipeline_blocks_without_usable_images(conn, tmp_path):
     # 플레이스홀더 비허용 + 권리확인 이미지 없음 → 제작 중단 (요구사항 3.8)

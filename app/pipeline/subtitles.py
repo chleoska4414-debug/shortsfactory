@@ -121,7 +121,8 @@ def write_ass(cues: list[SubtitleCue], out_path: str) -> str:
         "Format: Name, Fontname, Fontsize, PrimaryColour, OutlineColour, BackColour, "
         "Bold, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV\n"
         # 흰 글자 + 검은 외곽선, 하단 중앙(Alignment=2), 아래 여백 넉넉히
-        "Style: Default,Sans,64,&H00FFFFFF,&H00000000,&H64000000,"
+        # 폰트는 번들된 한글 폰트(NanumGothic) 사용 — 한글 깨짐 방지
+        "Style: Default,NanumGothic,64,&H00FFFFFF,&H00000000,&H64000000,"
         "1,1,4,2,2,60,60,320\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"

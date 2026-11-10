@@ -21,6 +21,10 @@ from app.config import get_settings
 
 WIDTH, HEIGHT, FPS = 1080, 1920, 30
 
+# 번들된 한글 폰트 디렉터리 (자막 렌더링용)
+FONTS_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+SUBTITLE_FONT_NAME = "NanumGothic"
+
 
 @dataclass
 class ComposeResult:
@@ -89,10 +93,15 @@ def compose_video(
     concat_inputs = "".join(f"[v{i}]" for i in range(n))
     filters.append(f"{concat_inputs}concat=n={n}:v=1:a=0[vconcat]")
 
-    # 자막 번인
+    # 자막 번인 — 번들된 한글 폰트(NanumGothic)를 명시적으로 사용.
+    # 시스템에 한글 폰트가 없으면 자막이 '두부(tofu)'로 깨지므로 fontsdir로 강제 지정.
     if subtitle_ass_path and Path(subtitle_ass_path).exists():
         ass = subtitle_ass_path.replace("\\", "/").replace(":", r"\:")
-        filters.append(f"[vconcat]subtitles='{ass}'[vout]")
+        sub_filter = f"subtitles='{ass}'"
+        if FONTS_DIR.exists():
+            fd = str(FONTS_DIR).replace("\\", "/").replace(":", r"\:")
+            sub_filter += f":fontsdir='{fd}'"
+        filters.append(f"[vconcat]{sub_filter}[vout]")
         vout = "[vout]"
     else:
         vout = "[vconcat]"
