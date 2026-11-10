@@ -18,6 +18,8 @@ from app.assets_repo import create_asset, list_assets, select_usable_assets
 from app.config import get_settings
 from app.db import get_connection, init_db
 from app.pipeline.orchestrator import produce_video
+from app.qc import run_qc
+from app.qc.checks import get_qc_results
 from app.videos_repo import list_videos, save_video, set_status
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -60,6 +62,13 @@ class ProduceIn(BaseModel):
     tone: str = "info"
     allow_placeholder_images: bool = False
     fetch_stock: bool = True
+
+
+class QCIn(BaseModel):
+    # 선택 입력 — 독창성 비교 소스, 대본 텍스트, AI 표시 설정 여부
+    source_text: str | None = None
+    script_text: str | None = None
+    ai_disclosed: bool = False
 
 
 # ---------- 상태 ----------
@@ -130,6 +139,40 @@ def api_approve(video_id: int) -> dict:
         if not v:
             raise HTTPException(404, "영상을 찾을 수 없습니다")
         return {"video": v}
+    finally:
+        conn.close()
+
+
+@app.post("/api/videos/{video_id}/qc")
+def api_run_qc(video_id: int, payload: QCIn | None = None) -> dict:
+    # 요구사항 4: 업로드 전 자동 검수. fail 이 있으면 영상은 held 로 전환된다.
+    from app.videos_repo import get_video
+
+    body = payload or QCIn()
+    conn = get_connection()
+    try:
+        if get_video(conn, video_id) is None:
+            raise HTTPException(404, "영상을 찾을 수 없습니다")
+        report = run_qc(
+            conn, video_id,
+            source_text=body.source_text,
+            script_text=body.script_text,
+            ai_disclosed=body.ai_disclosed,
+        )
+        return {"qc": report.as_dict()}
+    finally:
+        conn.close()
+
+
+@app.get("/api/videos/{video_id}/qc")
+def api_get_qc(video_id: int) -> dict:
+    from app.videos_repo import get_video
+
+    conn = get_connection()
+    try:
+        if get_video(conn, video_id) is None:
+            raise HTTPException(404, "영상을 찾을 수 없습니다")
+        return {"results": get_qc_results(conn, video_id)}
     finally:
         conn.close()
 
