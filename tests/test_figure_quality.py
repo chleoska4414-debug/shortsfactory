@@ -90,3 +90,53 @@ def test_scene_expression_is_derived_from_flags():
     assert cs[10]._expression() == "angry"       # cliffhanger flash line
     assert cs[11]._expression() == "shock"       # cliffhanger card
     assert cs[4]._expression() == "neutral"
+
+
+def test_raised_hand_is_role_specific_and_cache_safe():
+    # At shoulder height the hand adds visible skin outside the relaxed pose.
+    row = int(H * 0.385 + W * 0.16 * 1.3)
+    hand = (slice(row, row + int(W * 0.035)), slice(0, int(W * 0.21)), slice(0, 3))
+    for role in ("male_lead", "female_lead", "supporting"):
+        cache = {}
+        neutral, ch = _fig(role, cache=cache)
+        shock, _ = _fig(role, expression="shock", cache=cache)
+        assert np.array_equal(shock, _fig(role, expression="shock", cache={})[0])
+        blink, _ = _fig(role, expression="shock", eyes_closed=True, cache=cache)
+        assert np.array_equal(np.asarray(shock)[row:], np.asarray(blink)[row:])
+        assert np.array_equal(neutral, _fig(role, cache=cache)[0])
+        if role == "supporting":
+            assert len(cache) == 1
+            assert np.array_equal(np.asarray(neutral)[row:], np.asarray(shock)[row:])
+        else:
+            assert len(cache) == 2
+            assert not (np.asarray(neutral)[hand] == ch.visual.skin).all(axis=-1).any()
+            assert (np.asarray(shock)[hand] == ch.visual.skin).all(axis=-1).sum() > 50
+
+
+def test_sleeve_folds_create_ink_and_shadow_inside_jacket():
+    from shortsfactory.background.figure import _mix
+
+    img, ch = _fig("supporting")
+    r = W * 0.16
+    top = H * 0.385 + 1.18 * r
+    pixels = np.asarray(img)[int(top + 0.9 * r):int(top + 1.65 * r),
+                             int(W * 0.62):int(W * 0.81), :3]
+    base = ch.visual.accent
+    shadow = _mix(base, (0, 0, 20), 0.38)
+    for tone in (base, shadow):
+        assert (pixels == tone).all(axis=-1).sum() > 100
+    assert (pixels.mean(axis=-1) < np.mean(shadow) - 5).sum() > 20
+
+
+def test_front_locks_taper_toward_tips_for_long_and_bob():
+    from shortsfactory.background.figure import _Figure
+
+    for role, tip in (("female_lead", 2.72), ("supporting", 1.55)):
+        _, ch = _fig(role)
+        fig = _Figure(ch.visual, role, "neutral", W, H)
+        painter = fig.P()
+        fig._front_hair(painter)
+        alpha = np.asarray(painter.canvas)[:, fig.cx:, 3]
+        middle = (alpha[int(fig.cy + 0.64 * fig.r)] == 255).sum()
+        end = (alpha[int(fig.cy + (tip - 0.08) * fig.r)] == 255).sum()
+        assert 0 < end < middle * 0.55, ch.visual.hair_style

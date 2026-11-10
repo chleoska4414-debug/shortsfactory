@@ -230,6 +230,11 @@ class _Figure:
         acc_hi = _mix(acc, (255, 255, 255), 0.22)
         off = int(r * 0.06)
         role = self.role
+        cloth = (246, 238, 228) if role == "female_lead" else acc
+        cloth_sh, cloth_hi = acc_sh, acc_hi
+        if role == "female_lead":
+            cloth_sh = _mix(cloth, (150, 120, 120), 0.30)
+            cloth_hi = _mix(cloth, (255, 255, 255), 0.35)
 
         # neck (behind clothes collar)
         nw = int(r * 0.62)
@@ -247,16 +252,33 @@ class _Figure:
             sw = int(sw * 0.9)
 
         def torso(d):
-            # sloped shoulders (spline) down to a straight body
-            left = _spline([(cx - nw * 0.9, ttop - r * 0.25), (cx - sw * 0.2, ttop - r * 0.02),
-                            (cx - sw * 0.42, ttop + r * 0.22), (cx - sw * 0.5, ttop + r * 0.75),
-                            (cx - sw * 0.5, ttop + r * 1.6)], 10)
-            right = [(2 * cx - x, y) for x, y in left]
-            d.polygon(left + [(cx - sw * 0.5, tb + r), (cx + sw * 0.5, tb + r)] + right[::-1], fill=255)
+            left = _spline([(cx - nw * 0.9, ttop - r * 0.25), (cx - sw * 0.23, ttop + r * 0.01),
+                            (cx - sw * 0.43, ttop + r * 0.25), (cx - sw * 0.49, ttop + r * 0.7),
+                            (cx - sw * 0.51, ttop + r * 1.55), (cx - sw * 0.47, tb + r)])
+            right = [(2 * cx - x, y) for x, y in reversed(left)]
+            d.polygon(left + right, fill=255)
+
+        jacket = p.part(torso, cloth, cloth_sh, cloth_hi, off=off)
+        seam_color = _mix(cloth_sh, self.line_col, 0.45)
+        for side in (-1, 1):
+            def sleeve_point(x, y):
+                return cx + side * sw * x, ttop + r * y
+
+            shoulder = _spline([sleeve_point(0.39, 0.17), sleeve_point(0.34, 0.55),
+                                sleeve_point(0.36, 0.95), sleeve_point(0.33, 1.48)])
+            underarm = _spline([shoulder[-1], sleeve_point(0.35, 2.25),
+                                (cx + side * sw * 0.37, tb + r)])
+            p.detail(jacket, lambda d: d.polygon(underarm + [
+                sleeve_point(0.45, 1.85), sleeve_point(0.48, 1.38),
+                sleeve_point(0.38, 1.14)], fill=255), cloth_sh)
+            p.tapered(shoulder, self.line_w * 0.75, self.line_w * 0.35, seam_color)
+            p.tapered(underarm, self.line_w * 0.7, self.line_w * 0.35, seam_color)
+            for y in (1.05, 1.28):
+                fold = _spline([sleeve_point(0.46, y), sleeve_point(0.42, y + 0.09),
+                                sleeve_point(0.38, y + 0.12)], 6)
+                p.tapered(fold, self.line_w * 0.75, self.line_w * 0.18, seam_color)
 
         if role == "female_lead":
-            blouse = (246, 238, 228)
-            p.part(torso, blouse, _mix(blouse, (150, 120, 120), 0.30), off=off)
             # neckline
             p.part(lambda d: d.polygon([(cx - nw * 0.95, ttop - r * 0.5), (cx + nw * 0.95, ttop - r * 0.5),
                                         (cx + nw * 0.95, ttop + r * 0.05), (cx, ttop + r * 0.62),
@@ -280,7 +302,6 @@ class _Figure:
                                               (cx + sw * 0.34, tb + r), (cx + sw * 0.12, tb + r)], fill=255),
                      acc_sh, alpha=110)
         elif role == "male_lead":
-            t = p.part(torso, acc, acc_sh, acc_hi, off=off)
             # white shirt V
             shirt = (244, 244, 248)
             p.part(lambda d: d.polygon([(cx - nw * 1.05, ttop - 4), (cx + nw * 1.05, ttop - 4),
@@ -298,7 +319,6 @@ class _Figure:
                                                    (cx + s * r * 0.28, ttop + r * 1.9), (cx + s * r * 0.12, ttop + r * 1.9)],
                                                   fill=255), acc_hi, acc_sh, off=off // 2)
         else:  # blazer + collar
-            p.part(torso, acc, acc_sh, acc_hi, off=off)
             p.part(lambda d: d.polygon([(cx - nw * 1.1, ttop - 4), (cx + nw * 1.1, ttop - 4),
                                         (cx, ttop + r * 1.1)], fill=255), (246, 246, 250),
                    _mix((246, 246, 250), (120, 120, 150), 0.3), off=off // 2)
@@ -306,7 +326,44 @@ class _Figure:
                 p.part(lambda d, s=sgn: d.polygon([(cx + s * nw * 1.0, ttop - 2), (cx + s * nw * 1.8, ttop + r * 0.2),
                                                    (cx + s * r * 0.1, ttop + r * 1.15)], fill=255),
                        acc_hi, acc_sh, off=off // 2)
+        if self.raises_hand:
+            self._raised_arm(p, sw, cloth, cloth_sh, cloth_hi, off)
         return p.canvas
+
+    @property
+    def raises_hand(self) -> bool:
+        return self.expr == "shock" and self.role in ("male_lead", "female_lead")
+
+    def _raised_arm(self, p: _Painter, sw: int, cloth: RGB, shadow: RGB, highlight: RGB, off: int) -> None:
+        # Keep the hand outside the front locks and bend the forearm back toward the sleeve.
+        x = self.cx - sw * 0.49
+        y = self.torso_top
+        r = self.r
+
+        def point(dx, dy):
+            return x + r * dx, y + r * dy
+
+        palm = _spline([point(-0.27, 0.79), point(-0.38, 0.45), point(-0.40, 0.08),
+                        point(-0.35, -0.11), point(-0.23, -0.16), point(-0.13, -0.09),
+                        point(-0.09, 0.13), point(-0.08, 0.33)], 6)
+        thumb = _spline([palm[-1], point(0.03, 0.16), point(0.12, 0.18),
+                         point(0.11, 0.33), point(0.04, 0.52), point(-0.01, 0.77)], 6)
+        p.part(lambda d: d.polygon(palm + thumb, fill=255),
+               self.skin, self.skin_sh, self.skin_hi, off=off)
+        for dx, top in ((-0.30, -0.09), (-0.21, -0.13)):
+            p.tapered([point(dx, top), point(dx + 0.02, 0.16)],
+                      self.line_w * 0.5, self.line_w * 0.2, self.skin_sh)
+        p.tapered(_spline([thumb[0], point(-0.15, 0.42), point(-0.12, 0.54)], 6),
+                  self.line_w * 0.6, self.line_w * 0.22, self.skin_sh)
+
+        sleeve = _spline([point(-0.34, 0.69), point(-0.29, 1.17), point(-0.11, 1.65),
+                          point(0.12, 1.77), point(0.34, 1.55), point(0.26, 1.20),
+                          point(0.10, 0.67)], 8)
+        p.part(lambda d: d.polygon(sleeve, fill=255), cloth, shadow, highlight, off=off)
+        p.stroke([point(-0.33, 0.79), point(0.12, 0.77)], self.line_w,
+                 _mix(shadow, self.line_col, 0.45), caps=False)
+        p.tapered(_spline([point(0.26, 1.54), point(0.08, 1.46), point(-0.08, 1.29)], 6),
+                  self.line_w, self.line_w * 0.25, shadow)
 
     def head_layer(self, eyes_closed: bool, mouth_open: bool) -> Image.Image:
         p = self.P()
@@ -526,20 +583,26 @@ class _Figure:
         def fringe(d):
             d.polygon(crown + lower, fill=255)
 
-        hairp = p.part(fringe, self.hair, self.hair_sh, self.hair_hi, off=off)
-
-        # side locks for long / bob hair (fall in front of the shoulders)
+        # Paint locks first so their roots tuck into the crown without a seam.
         if self.fem:
-            bottom = 2.55 if style == "long" else 1.35
-            inward = 0.58 if style == "long" else 0.62
-            for sgn in (-1, 1):
-                lock = _spline([Q(sgn * 1.0, -0.05), Q(sgn * 1.2, bottom * 0.25), Q(sgn * 1.3, bottom * 0.6),
-                                Q(sgn * 1.22, bottom * 0.92)], 8)
-                lock += [Q(sgn * 1.0, bottom + 0.18)]
-                lock += _spline([Q(sgn * 0.9, bottom * 0.8), Q(sgn * 0.84, bottom * 0.5), Q(sgn * 0.8, 0.45),
-                                 Q(sgn * 0.82, 0.05)], 8)
-                lp = p.part(lambda d, L=lock: d.polygon(L, fill=255), self.hair, self.hair_sh, self.hair_hi, off=off)
-                p.detail(lp, lambda d, s=sgn: self._strands(d, s, bottom), self.hair_sh, alpha=170)
+            long = style == "long"
+            tip = (1.04, 2.72) if long else (0.70, 1.55)
+            outer = [(0.85, -0.67), (1.12, -0.16), (1.27, 0.55)]
+            inner = [(0.84, 0.82), (0.76, 0.30), (0.57, -0.15)]
+            if long:
+                outer += [(1.30, 1.35), (1.23, 2.19)]
+                inner = [(0.99, 2.22), (0.91, 1.46)] + inner
+            else:
+                outer += [(1.19, 1.03), (0.97, 1.36)]
+                inner = [(0.79, 1.22)] + inner
+            for side in (-1, 1):
+                lock = _spline([Q(side * x, y) for x, y in outer + [tip]], 8)
+                lock += _spline([Q(side * x, y) for x, y in [tip] + inner], 8)
+                lp = p.part(lambda d: d.polygon(lock, fill=255),
+                            self.hair, self.hair_sh, self.hair_hi, off=off)
+                p.detail(lp, lambda d: self._strands(d, side, tip), self.hair_sh, alpha=180)
+
+        hairp = p.part(fringe, self.hair, self.hair_sh, self.hair_hi, off=off)
 
         # crown highlight ring ("angel ring") + strand lines on the fringe
         def ring(d):
@@ -565,16 +628,20 @@ class _Figure:
             pts = [Q(x, -0.45), Q(x + sgn * 0.04, -0.2), Q(x - sgn * 0.02, 0.1)]
             p.tapered(_spline(pts, 8), r * 0.035, r * 0.01, sk)
 
-    def _strands(self, d, sgn: int, bottom: float) -> None:
+    def _strands(self, d, side: int, tip: Pt) -> None:
         cx, cy, r = self.cx, self.cy, self.r
-        for i in range(4):
-            x = sgn * (0.86 + 0.07 * i)
-            pts = [(cx + x * r, cy + 0.2 * r), (cx + (x + sgn * 0.03) * r, cy + bottom * 0.5 * r),
-                   (cx + (x - sgn * 0.02) * r, cy + bottom * 0.95 * r)]
-            d.line(_spline(pts, 8), fill=255, width=max(2, int(r * 0.014)))
+        tip_x, length = tip
+        for start, spread in ((0.83, 0.00), (0.97, 0.12)):
+            curve = [(start, -0.30), (0.97 + spread, 0.33),
+                     (tip_x + 0.15 + spread, length * 0.59),
+                     (tip_x + 0.04 + spread * 0.2, length * 0.94)]
+            outer = _spline([(cx + side * x * r, cy + y * r) for x, y in curve], 8)
+            inner = _spline([(cx + side * (x - width) * r, cy + y * r)
+                             for (x, y), width in zip(curve, (0.02, 0.06, 0.045, 0))], 8)
+            d.polygon(outer + inner[::-1], fill=255)
 
 
-_body_cache: Dict[tuple, Image.Image] = {}
+_body_cache: Dict[tuple, Tuple[Image.Image, Image.Image]] = {}
 
 
 def render_figure(
@@ -590,7 +657,8 @@ def render_figure(
     """Render the cel-shaded bust as an RGBA image of exactly (width, height)."""
     fig = _Figure(spec, role, expression, width, height)
     store = cache if cache is not None else _body_cache
-    key = ("static", spec.accent, spec.hair, spec.skin, spec.hair_style, spec.anchor_x, role, width, height)
+    key = ("static", spec.accent, spec.hair, spec.skin, spec.hair_style, spec.anchor_x, role,
+           width, height, fig.raises_hand)
     static = store.get(key)
     if static is None:
         back = fig.back_layer()
