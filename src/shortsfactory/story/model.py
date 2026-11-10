@@ -87,6 +87,9 @@ class Scene:
     emphasis: bool = False  # emphasize the caption (twist punch)
     cliffhanger: bool = False  # render the emphasized cliffhanger card + teaser
     flash: bool = False  # a brief white flash in at the cut
+    # Optional facial expression override for the code-drawn figure: 'neutral', 'angry',
+    # 'shock', 'resigned' or 'worried'. When None it is derived from the beat/flags.
+    expression: Optional[str] = None
 
     def staged_figure_id(self) -> Optional[str]:
         """Return the character id whose figure should be drawn for this scene."""

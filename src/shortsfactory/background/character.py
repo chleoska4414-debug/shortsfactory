@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from ..story.model import (
     BEAT_CLIFFHANGER,
@@ -39,6 +39,7 @@ from ..story.model import (
     VisualSpec,
 )
 from .base import BackgroundProvider
+from .figure import EXPRESSIONS, render_figure
 
 RGB = Tuple[int, int, int]
 
@@ -227,6 +228,7 @@ class CharacterScene(BackgroundProvider):
         self._figure_mouth: Optional[Image.Image] = None
         self._has_drawn_face: bool = self._asset_image_path() is None
         self._base_rgb: Optional[np.ndarray] = None
+        self._fig_cache: dict = {}
 
     # -- asset image hook ---------------------------------------------------------------
     def _asset_image_path(self) -> Optional[str]:
@@ -275,122 +277,72 @@ class CharacterScene(BackgroundProvider):
                 # Fall through to the code-drawn figure if the asset is unreadable.
                 pass
 
-        draw = ImageDraw.Draw(layer)
-
-        cx = int(width * spec.anchor_x)
-        # Head geometry.
-        head_r = int(width * 0.16)
-        head_cy = int(height * 0.40)
-        head_cx = cx
-
-        # Shoulders / torso (accent wardrobe). A rounded trapezoid-ish bust.
-        shoulder_w = int(width * 0.62)
-        torso_top = head_cy + int(head_r * 0.9)
-        torso_bottom = int(height * 0.92)
-        accent = spec.accent
-        accent_dark = _lerp(accent, (0, 0, 0), 0.35)
-        # Body as a big rounded rectangle, with a darker inner panel for depth.
-        draw.rounded_rectangle(
-            [cx - shoulder_w // 2, torso_top, cx + shoulder_w // 2, torso_bottom],
-            radius=int(width * 0.14),
-            fill=accent,
-        )
-        draw.rounded_rectangle(
-            [cx - shoulder_w // 6, torso_top + int(head_r * 0.2), cx + shoulder_w // 6, torso_bottom],
-            radius=int(width * 0.06),
-            fill=accent_dark,
+        role = self.character.role if self.character is not None else "supporting"
+        return render_figure(
+            spec, role, width, height,
+            expression=self._expression(),
+            eyes_closed=eyes_closed, mouth_open=mouth_open,
+            cache=self._fig_cache,
         )
 
-        # Neck.
-        neck_w = int(head_r * 0.7)
-        draw.rounded_rectangle(
-            [head_cx - neck_w // 2, head_cy + int(head_r * 0.4),
-             head_cx + neck_w // 2, torso_top + int(head_r * 0.2)],
-            radius=neck_w // 3,
-            fill=spec.skin,
-        )
+    def _expression(self) -> str:
+        """Pick the facial expression from the scene (explicit override, else beat/flags)."""
+        sc = self.scene
+        if sc is None:
+            return "neutral"
+        if sc.expression in EXPRESSIONS:
+            return sc.expression
+        if sc.flash and (sc.beat_label or "").upper() == BEAT_CLIFFHANGER:
+            return "angry"
+        if sc.cliffhanger or sc.flash:
+            return "shock"
+        if sc.emphasis:
+            return "resigned" if sc.kind != KIND_DIALOG else "angry"
+        if sc.rain:
+            return "worried"
+        return "neutral"
 
-        # Head (face).
-        draw.ellipse(
-            [head_cx - head_r, head_cy - head_r, head_cx + head_r, head_cy + head_r],
-            fill=spec.skin,
-        )
-
-        # Simple face features (eyes + subtle mouth) in a soft ink tone.
-        ink = _lerp(spec.hair, (0, 0, 0), 0.2)
-        eye_dy = int(head_r * 0.12)
-        eye_dx = int(head_r * 0.42)
-        eye_r = max(3, int(head_r * 0.10))
-        lid = max(2, eye_r // 2)
-        for sgn in (-1, 1):
-            ex = head_cx + sgn * eye_dx
-            ey = head_cy + eye_dy
-            if eyes_closed:
-                # A blink: a short lid line instead of the open eye.
-                draw.line([ex - eye_r, ey, ex + eye_r, ey], fill=ink, width=lid)
-            else:
-                draw.ellipse([ex - eye_r, ey - eye_r, ex + eye_r, ey + eye_r], fill=ink)
-        # Mouth: a thin closed line, or a small open ellipse while speaking.
-        mouth_w = int(head_r * 0.34)
-        my = head_cy + int(head_r * 0.52)
-        mouth_col = _lerp(spec.skin, (120, 40, 40), 0.5)
-        if mouth_open:
-            mh = max(3, int(head_r * 0.14))
-            draw.ellipse(
-                [head_cx - mouth_w // 2, my - mh, head_cx + mouth_w // 2, my + mh],
-                fill=_lerp(spec.skin, (90, 30, 30), 0.65),
-            )
-        else:
-            draw.line(
-                [head_cx - mouth_w // 2, my, head_cx + mouth_w // 2, my],
-                fill=mouth_col,
-                width=max(2, head_r // 18),
-            )
-
-        # Hair silhouette, shape driven by the style token so characters differ.
-        self._draw_hair(draw, spec, head_cx, head_cy, head_r, height)
-
-        return layer
-
-    def _draw_hair(self, draw, spec: VisualSpec, cx: int, cy: int, r: int, height: int):
-        hair = spec.hair
-        style = (spec.hair_style or "short").lower()
-
-        if style == "long":
-            # Long hair framing the face and falling past the shoulders.
-            draw.ellipse([cx - int(r * 1.15), cy - int(r * 1.15),
-                          cx + int(r * 1.15), cy + int(r * 0.35)], fill=hair)
-            # Side falls.
-            draw.rounded_rectangle(
-                [cx - int(r * 1.15), cy - int(r * 0.2), cx - int(r * 0.55), cy + int(r * 2.4)],
-                radius=int(r * 0.4), fill=hair)
-            draw.rounded_rectangle(
-                [cx + int(r * 0.55), cy - int(r * 0.2), cx + int(r * 1.15), cy + int(r * 2.4)],
-                radius=int(r * 0.4), fill=hair)
-            # Re-expose the face oval.
-            draw.ellipse([cx - int(r * 0.85), cy - int(r * 0.7),
-                          cx + int(r * 0.85), cy + int(r * 1.0)], fill=spec.skin)
-        elif style == "swept":
-            # Short, side-swept corporate hair: an asymmetric cap.
-            draw.ellipse([cx - int(r * 1.12), cy - int(r * 1.2),
-                          cx + int(r * 1.12), cy + int(r * 0.1)], fill=hair)
-            # Sweep a fringe to one side by carving the forehead back in.
-            draw.pieslice([cx - int(r * 0.95), cy - int(r * 0.95),
-                           cx + int(r * 1.1), cy + int(r * 0.2)], start=200, end=340,
-                          fill=spec.skin)
-        elif style == "bob":
-            draw.ellipse([cx - int(r * 1.1), cy - int(r * 1.1),
-                          cx + int(r * 1.1), cy + int(r * 0.9)], fill=hair)
-            draw.ellipse([cx - int(r * 0.82), cy - int(r * 0.6),
-                          cx + int(r * 0.82), cy + int(r * 1.0)], fill=spec.skin)
-        elif style == "buzz":
-            draw.arc([cx - r, cy - int(r * 1.05), cx + r, cy + int(r * 0.4)],
-                     start=180, end=360, fill=hair, width=max(4, r // 6))
-        else:  # 'short'
-            draw.ellipse([cx - int(r * 1.08), cy - int(r * 1.15),
-                          cx + int(r * 1.08), cy + int(r * 0.05)], fill=hair)
-            draw.ellipse([cx - int(r * 0.9), cy - int(r * 0.7),
-                          cx + int(r * 0.9), cy + int(r * 0.4)], fill=spec.skin)
+    def _add_props(self, base: np.ndarray, width: int, height: int) -> np.ndarray:
+        """Tiny set pieces behind the figure: a rainy street lamp or convenience-store shelves."""
+        sc = self.scene
+        if sc is None or sc.breaking_news:
+            return base
+        layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        d = ImageDraw.Draw(layer)
+        dark = _lerp(self._palette_bottom, (0, 0, 0), 0.35)
+        if sc.rain:
+            x = int(width * 0.12)
+            d.rectangle([x - 8, int(height * 0.22), x + 8, height], fill=dark + (255,))
+            d.rectangle([x - 8, int(height * 0.22), x + 150, int(height * 0.22) + 14], fill=dark + (255,))
+            d.rounded_rectangle([x + 110, int(height * 0.22) + 8, x + 190, int(height * 0.22) + 40],
+                                radius=12, fill=(255, 226, 150, 255))
+            layer = layer.filter(ImageFilter.GaussianBlur(2.5))
+            arr = np.asarray(layer, dtype=np.float64)
+            a = arr[:, :, 3:4] / 255.0
+            base = base * (1.0 - a * 0.9) + arr[:, :, :3] * a * 0.9
+            yy, xx = np.mgrid[0:height, 0:width]
+            gx, gy = x + 150, int(height * 0.22) + 24
+            glow = np.exp(-(((xx - gx) / (width * 0.32)) ** 2 + ((yy - gy) / (height * 0.2)) ** 2))
+            return base + glow.reshape(height, width, 1) * np.array([70.0, 58.0, 30.0]).reshape(1, 1, 3)
+        beat = (sc.beat_label or "").upper()
+        if beat in (BEAT_TWIST1, BEAT_TWIST2):
+            rng = np.random.default_rng(4242 + self.seed)
+            lighter = _lerp(self._palette_top, (255, 255, 255), 0.18)
+            for row, y in enumerate((0.20, 0.31, 0.42)):
+                yy = int(height * y)
+                d.rectangle([0, yy, width, yy + 10], fill=dark + (255,))
+                x = int(width * 0.02)
+                while x < width:
+                    bw = int(rng.integers(34, 80))
+                    bh = int(rng.integers(50, 92))
+                    col = lighter if rng.random() < 0.5 else _lerp(self._palette_top, (0, 0, 0), 0.2)
+                    d.rectangle([x, yy - bh, x + bw, yy], fill=col + (255,))
+                    x += bw + int(rng.integers(6, 18))
+            layer = layer.filter(ImageFilter.GaussianBlur(4))
+            arr = np.asarray(layer, dtype=np.float64)
+            a = arr[:, :, 3:4] / 255.0 * 0.55
+            return base * (1.0 - a) + arr[:, :, :3] * a
+        return base
 
     def _texture(self, width: int, height: int) -> np.ndarray:
         """A faint deterministic grain so the sky reads as illustration, not a flat fill."""
@@ -419,6 +371,7 @@ class CharacterScene(BackgroundProvider):
         glow_color = np.array(_lerp(self._palette_top, (255, 255, 255), 0.25), dtype=np.float64)
         base = base * (1.0 - 0.28 * glow) + glow_color.reshape(1, 1, 3) * (0.28 * glow)
 
+        base = self._add_props(base, width, height)
         base += self._texture(width, height)
         base *= self._vignette(width, height)
         base = np.clip(base, 0, 255)
